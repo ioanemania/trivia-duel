@@ -15,10 +15,18 @@ class GameConsumer(JsonWebsocketConsumer):
         except NotFoundError:
             raise DenyConnection()
 
-        if len(lobby.users) > 1:
+        if lobby.user_count > 1:
             raise DenyConnection()
 
-        lobby.users.append(self.channel_name)
+        token = self.scope["query_string"].decode()
+        for token_tuple in lobby.tokens:
+            if token_tuple[0] == token:
+                self.token, self.user_id = token_tuple
+                break
+        else:
+            raise DenyConnection()
+
+        lobby.user_count += 1
         lobby.save()
 
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
@@ -29,7 +37,7 @@ class GameConsumer(JsonWebsocketConsumer):
             }
         )
 
-        if len(lobby.users) == 2:
+        if lobby.user_count == 2:
             pass  # start the game
 
     def disconnect(self, code):
@@ -41,9 +49,9 @@ class GameConsumer(JsonWebsocketConsumer):
         )
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.users.remove(self.channel_name)
+        lobby.tokens.remove((self.token, self.user_id))
 
-        if len(lobby.users) == 0:
+        if lobby.user_count == 0:
             Lobby.delete(lobby.pk)
 
         lobby.save()
