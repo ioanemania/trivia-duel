@@ -11,4 +11,5 @@ class LobbySerializer(serializers.Serializer):
 
     def create(self, validated_data):
         lobby = self.Meta.model(name=validated_data['name'])
+        lobby.save()
         return lobby

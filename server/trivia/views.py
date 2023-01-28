@@ -34,6 +34,9 @@ class LobbyViewSet(ViewSet):
         if len(lobby.tokens) > 1:
             return Response(data={"detail": "Lobby is full"}, status=status.HTTP_400_BAD_REQUEST)
 
+        if request.user.id in (token_tuple[1] for token_tuple in lobby.tokens):
+            return Response(data={"detail": "Already joined the lobby"}, status=status.HTTP_400_BAD_REQUEST)
+
         token = secrets.token_urlsafe(16)
         lobby.tokens.append((token, request.user.id))
         lobby.save()

@@ -7,13 +7,16 @@ from channels.testing import WebsocketCommunicator
 from channels.routing import URLRouter
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
+from redis_om import get_redis_connection
 
-from .urls import websocket_urlpatterns
-from .models import Lobby
+from trivia.urls import websocket_urlpatterns
+from trivia.models import Lobby
 
 application = AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
 
 User = get_user_model()
+test_db = get_redis_connection(url="redis://@redis:6379/1")
+Lobby.Meta.database = test_db
 
 
 class GameConsumerTestCase(TestCase):
