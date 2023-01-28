@@ -1,4 +1,15 @@
 services:
+  app:
+    build: server/
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_OM_URL=redis://@redis:6379
+    volumes:
+      - ./server/:/app
+    depends_on:
+      - redis
+
   redis:
     image: redislabs/rejson
     ports:
