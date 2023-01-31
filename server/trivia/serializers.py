@@ -4,12 +4,13 @@ from .models import Lobby
 
 
 class LobbySerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=100)
+    name = serializers.SlugField(max_length=100)
+    ranked = serializers.BooleanField(default=False)
 
     class Meta:
         model = Lobby
 
-    def create(self, validated_data):
-        lobby = self.Meta.model(name=validated_data['name'])
-        lobby.save()
-        return lobby
+    def validate_name(self, value: str):
+        if any(Lobby.find(Lobby.name == value).all()):
+            raise serializers.ValidationError("Lobby with the given name already exists")
+        return value

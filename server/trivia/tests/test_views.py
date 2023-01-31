@@ -16,52 +16,58 @@ class LobbyViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user1 = User.objects.create_user(username="user1", password="user1")
-        cls.user1.save()
         cls.user2 = User.objects.create_user(username="user2", password="user2")
-        cls.user2.save()
         cls.user3 = User.objects.create_user(username="user3", password="user3")
+
+        cls.user1.save()
+        cls.user2.save()
         cls.user3.save()
 
-    def tearDown(self) -> None:
+        cls.lobby_name = "TEST_LOBBY"
+
+    def setUp(self):
+        self.lobby = Lobby(name=self.lobby_name)
+        self.lobby.save()
+
+    def tearDown(self):
         for key in test_db.scan_iter("*"):
             test_db.delete(key)
 
     def test_create_lobby(self):
         url = reverse("lobby-list")
-        lobby_name = "TEST_LOBBY"
+        lobby_name = "TEST_CREATE_LOBBY"
 
         self.client.force_authenticate(user=self.user1)
         response = self.client.post(url, {"name": lobby_name}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Lobby.get(lobby_name).name, lobby_name)
+
+        lobby = Lobby.get(lobby_name)
+        token = response.data['token']
+
+        self.assertEqual(lobby.name, lobby_name)
+        self.assertIn(token, lobby.users.keys())
 
     def test_join_lobby_unauthenticated(self):
-        lobby_name = "TEST_LOBBY"
-        lobby = Lobby(name=lobby_name)
-        lobby.save()
-        url = reverse("lobby-join", args=[lobby_name])
+        url = reverse("lobby-join", args=[self.lobby_name])
 
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_join_lobby(self):
-        lobby_name = "TEST_LOBBY"
-        lobby = Lobby(name=lobby_name)
-        lobby.save()
-        url = reverse("lobby-join", args=[lobby_name])
+        url = reverse("lobby-join", args=[self.lobby_name])
 
         self.client.force_authenticate(user=self.user1)
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         token = response.data['token']
-        lobby = Lobby.get(lobby_name)
-        self.assertIn(token, (token_tuple[0] for token_tuple in lobby.tokens))
+        lobby = Lobby.get(self.lobby_name)
+        self.assertIn(token, lobby.users.keys())
 
     def test_join_lobby_non_existing(self):
-        lobby_name = "TEST_LOBBY"
+        lobby_name = "NON_EXISTING_LOBBY"
         url = reverse("lobby-join", args=[lobby_name])
 
         self.client.force_authenticate(user=self.user1)
@@ -70,10 +76,7 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_join_lobby_same_user_twice(self):
-        lobby_name = "TEST_LOBBY"
-        lobby = Lobby(name=lobby_name)
-        lobby.save()
-        url = reverse("lobby-join", args=[lobby_name])
+        url = reverse("lobby-join", args=[self.lobby_name])
 
         self.client.force_authenticate(user=self.user1)
         self.client.post(url)
@@ -82,10 +85,7 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_join_lobby_two_users(self):
-        lobby_name = "TEST_LOBBY"
-        lobby = Lobby(name=lobby_name)
-        lobby.save()
-        url = reverse("lobby-join", args=[lobby_name])
+        url = reverse("lobby-join", args=[self.lobby_name])
 
         self.client.force_authenticate(user=self.user1)
         self.client.post(url)
@@ -96,10 +96,7 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_join_lobby_more_than_two_users(self):
-        lobby_name = "TEST_LOBBY"
-        lobby = Lobby(name=lobby_name)
-        lobby.save()
-        url = reverse("lobby-join", args=[lobby_name])
+        url = reverse("lobby-join", args=[self.lobby_name])
 
         self.client.force_authenticate(user=self.user1)
         self.client.post(url)

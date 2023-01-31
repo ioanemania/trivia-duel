@@ -1,0 +1,118 @@
+[
+  {
+    "category": "History",
+    "type": "boolean",
+    "difficulty": "easy",
+    "question": "The Cold War ended with Joseph Stalin&#039;s death.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+      "True"
+    ]
+  },
+  {
+    "category": "Science: Computers",
+    "type": "boolean",
+    "difficulty": "medium",
+    "question": "All program codes have to be compiled into an executable file in order to be run. This file can then be executed on any machine.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+      "True"
+    ]
+  },
+  {
+    "category": "Entertainment: Film",
+    "type": "multiple",
+    "difficulty": "easy",
+    "question": "Which movie includes a giant bunny-like spirit who has magic powers including growing trees?",
+    "correct_answer": "My Neighbor Totoro",
+    "incorrect_answers": [
+      "Hop",
+      "Rise of the Guardians",
+      "Alice in Wonderland"
+    ]
+  },
+  {
+    "category": "Geography",
+    "type": "multiple",
+    "difficulty": "easy",
+    "question": "Which of the following Arab countries does NOT have a flag containing only Pan-Arab colours?",
+    "correct_answer": "Qatar",
+    "incorrect_answers": [
+      "Kuwait",
+      "United Arab Emirates",
+      "Jordan"
+    ]
+  },
+  {
+    "category": "Science & Nature",
+    "type": "multiple",
+    "difficulty": "hard",
+    "question": "&quot;The Big Bang Theory&quot; was first theorized by a priest of what religious ideology?",
+    "correct_answer": "Catholic",
+    "incorrect_answers": [
+      "Christian",
+      "Jewish",
+      "Islamic"
+    ]
+  },
+  {
+    "category": "Science & Nature",
+    "type": "multiple",
+    "difficulty": "medium",
+    "question": "What does the yellow diamond on the NFPA 704 fire diamond represent?",
+    "correct_answer": "Reactivity",
+    "incorrect_answers": [
+      "Health",
+      "Flammability",
+      "Radioactivity"
+    ]
+  },
+  {
+    "category": "Science & Nature",
+    "type": "multiple",
+    "difficulty": "medium",
+    "question": "Which of these elements on the Periodic Table is a Noble Gas?",
+    "correct_answer": "Neon",
+    "incorrect_answers": [
+      "Potassium",
+      "Iodine",
+      "Colbalt"
+    ]
+  },
+  {
+    "category": "Entertainment: Video Games",
+    "type": "multiple",
+    "difficulty": "hard",
+    "question": "In &quot;Team Fortress 2&quot;, what is the fastest taunt kill that can be pulled off?",
+    "correct_answer": "Showdown",
+    "incorrect_answers": [
+      "Hadouken",
+      "Organ Grinder",
+      "Skewer"
+    ]
+  },
+  {
+    "category": "Entertainment: Film",
+    "type": "multiple",
+    "difficulty": "easy",
+    "question": "What was the first feature-length computer-animated movie?",
+    "correct_answer": "Toy Story",
+    "incorrect_answers": [
+      "Tron",
+      "Lion king",
+      "101 Dalmatians"
+    ]
+  },
+  {
+    "category": "Entertainment: Television",
+    "type": "multiple",
+    "difficulty": "medium",
+    "question": "What does Bart sell his soul for in The Simpsons episode &#039;Bart Sells His Soul&#039;?",
+    "correct_answer": "$5",
+    "incorrect_answers": [
+      "A Copy of Bonestorm 2",
+      "$100",
+      "A Giant Gobstopper"
+    ]
+  }
+]

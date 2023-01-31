@@ -1,5 +1,3 @@
-import secrets
-
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 from rest_framework import status
@@ -9,6 +7,7 @@ from redis_om.model.model import NotFoundError
 
 from .serializers import LobbySerializer
 from .models import Lobby
+from .utils import generate_lobby_token_and_data
 
 
 class LobbyViewSet(ViewSet):
@@ -16,13 +15,22 @@ class LobbyViewSet(ViewSet):
     serializer_class = LobbySerializer
 
     def create(self, request):
-        """Create a new lobby"""
-
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
 
-        return Response(data=serializer.data, status=status.HTTP_201_CREATED)
+        lobby = serializer.Meta.model(**serializer.validated_data)
+        token, data = generate_lobby_token_and_data(request.user)
+
+        lobby.users[token] = data
+        lobby.save()
+
+        return Response(data={"token": token}, status=status.HTTP_201_CREATED)
+
+    def list(self, request):
+        lobbies = Lobby.find().all()
+        serializer = self.serializer_class(instance=lobbies, many=True)
+
+        return Response(data=serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def join(self, request, pk=None):
@@ -31,14 +39,15 @@ class LobbyViewSet(ViewSet):
         except NotFoundError:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        if len(lobby.tokens) > 1:
+        if len(lobby.users) > 1:
             return Response(data={"detail": "Lobby is full"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.user.id in (token_tuple[1] for token_tuple in lobby.tokens):
+        if request.user.id in (user['user_id'] for user in lobby.users.values()):
             return Response(data={"detail": "Already joined the lobby"}, status=status.HTTP_400_BAD_REQUEST)
 
-        token = secrets.token_urlsafe(16)
-        lobby.tokens.append((token, request.user.id))
+        token, data = generate_lobby_token_and_data(request.user)
+
+        lobby.users[token] = data
         lobby.save()
 
         return Response(data={"token": token}, status=status.HTTP_200_OK)

@@ -133,14 +133,28 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# CHANNELS
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer"
     }
 }
 
+# DRF
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
+}
+
+# TRIVIA API
+
+TRIVIA_API_URL = "https://opentdb.com/api.php?amount=10"
+
+QUESTION_DIFFICULTY_DAMAGE_MAP = {
+    "easy": 10,
+    "medium": 20,
+    "hard": 25
 }
