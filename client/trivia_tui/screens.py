@@ -36,16 +36,12 @@ class LoginOrRegisterScreen(Screen):
 
     async def on_button_pressed(self, event: Button.Pressed):
         username, password = self.query_credentials()
-        payload = {
-            "username": username,
-            "password": password
-        }
+
         # TODO: error handling
         if event.button.id == "btn-register":
-            response = requests.post("http://localhost:8000/api/user/register/", json=payload)
+            self.app.client.register(username, password)
         elif event.button.id == "btn-login":
-            response = requests.post("http://localhost:8000/api/token/", json=payload).json()
-            self.app.access_token, self.app.refresh_token = response['access'], response['refresh']
+            self.app.client.login(username, password)
             await self.app.push_screen(MainMenuScreen())
 
     def query_credentials(self) -> tuple[str, str]:
@@ -104,11 +100,9 @@ class HostScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed):
         event.prevent_default()
         lobby_name = self.query_one("#lobby-name").value
-        payload = {"name": lobby_name}
 
         # TODO: Error handling
-        data = requests.post("http://localhost:8000/api/trivia/lobbies/", json=payload,
-                             auth=TokenAuth(self.app.access_token)).json()
+        data = self.app.client.create_lobby(lobby_name)
 
         self.app.install_screen(self)
         self.app.switch_screen(GameScreen(lobby_name, data['token']))
@@ -124,16 +118,15 @@ class JoinScreen(Screen):
         super().__init__()
 
     def compose(self) -> ComposeResult:
-        # TODO: Error handling
-        response = requests.get("http://localhost:8000/api/trivia/lobbies/",
-                                auth=TokenAuth(self.app.access_token)).json()
-        for lobby in response:
+        lobbies = self.app.client.get_lobbies()
+
+        for lobby in lobbies:
             yield Button(lobby['name'])
 
     def on_button_pressed(self, event: Button.Pressed):
         lobby_name = event.button.label
-        data = requests.post(f"http://localhost:8000/api/trivia/lobbies/{lobby_name}/join/",
-                             auth=TokenAuth(self.app.access_token)).json()
+
+        data = self.app.client.join_lobby(lobby_name)
 
         self.app.install_screen(self)
         self.app.switch_screen(GameScreen(lobby_name, data['token']))
@@ -155,8 +148,7 @@ class GameScreen(Screen):
         yield Static("Loading In...")
 
     async def on_mount(self):
-        # TODO: Refactor websocket connection
-        self.ws = await websockets.connect(f"ws://localhost:8000/ws/trivia/lobbies/{self.lobby}?{self.token}")
+        self.ws = await self.app.client.ws_join_lobby(self.lobby, self.token)
         asyncio.create_task(self.receive_ws())
 
     async def receive_ws(self) -> None:
