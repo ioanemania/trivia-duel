@@ -63,16 +63,21 @@ class TriviaClient:
         }).json()
         self.access_token, self.refresh_token = data['access'], data['refresh']
 
-    def get_lobbies(self) -> list:
-        url = self.api_base_url + "/api/trivia/lobbies/"
+    def get_lobbies(self, ranked: Optional[bool] = None) -> list:
+        url_components = (self.api_base_url, "/api/trivia/lobbies/")
+
+        if ranked is not None:
+            url_components += f"?ranked=", str(ranked)
+        url = "".join(url_components)
 
         return self._make_request("GET", url=url).json()
 
-    def create_lobby(self, lobby_name: str) -> dict:
+    def create_lobby(self, lobby_name: str, ranked: bool) -> dict:
         url = self.api_base_url + "/api/trivia/lobbies/"
 
         return self._make_request("POST", url=url, json={
-            "name": lobby_name
+            "name": lobby_name,
+            "ranked": ranked
         }).json()
 
     def join_lobby(self, lobby_name: str) -> dict:

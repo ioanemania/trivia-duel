@@ -87,12 +87,16 @@ class JoinOrHostScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-host":
-            self.app.push_screen(HostScreen())
+            self.app.push_screen(HostScreen(self.game_type))
         elif event.button.id == "btn-join":
             self.app.push_screen(JoinScreen(self.game_type))
 
 
 class HostScreen(Screen):
+    def __init__(self, game_type: str):
+        self.game_type = game_type
+        super().__init__()
+
     def compose(self) -> ComposeResult:
         yield Input(placeholder="Lobby Name", id="lobby-name")
         yield Button("Create")
@@ -102,7 +106,7 @@ class HostScreen(Screen):
         lobby_name = self.query_one("#lobby-name").value
 
         # TODO: Error handling
-        data = self.app.client.create_lobby(lobby_name)
+        data = self.app.client.create_lobby(lobby_name, ranked=self.game_type == "ranked")
 
         self.app.install_screen(self)
         self.app.switch_screen(GameScreen(lobby_name, data['token']))
@@ -118,7 +122,7 @@ class JoinScreen(Screen):
         super().__init__()
 
     def compose(self) -> ComposeResult:
-        lobbies = self.app.client.get_lobbies()
+        lobbies = self.app.client.get_lobbies(ranked=self.game_type == "ranked")
 
         for lobby in lobbies:
             yield Button(lobby['name'])
