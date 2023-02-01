@@ -133,7 +133,7 @@ class GameConsumer(JsonWebsocketConsumer):
             rank_gain = -20
 
         user = User.objects.get(pk=self.user_id)
-        if lobby.is_ranked:
+        if lobby.ranked:
             user.rank += rank_gain
             user.save()
 
@@ -141,7 +141,8 @@ class GameConsumer(JsonWebsocketConsumer):
             user=user,
             rank=user.rank,
             status=status,
-            type="ranked" if lobby.is_ranked else "casual"
+            # TODO: Use choices
+            type="ranked" if lobby.ranked else "casual"
         )
         game.save()
 

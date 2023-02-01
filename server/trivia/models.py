@@ -20,7 +20,7 @@ class Lobby(JsonModel):
     users: Dict[Token, PlayerData] = {}
     current_answer_count: int = 0
     game_started: bool = False
-    is_ranked: int = Field(index=True, default=0)
+    ranked: int = Field(index=True, default=0)
 
 
 class Game(models.Model):

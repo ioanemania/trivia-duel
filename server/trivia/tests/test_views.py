@@ -121,23 +121,23 @@ class LobbyViewSetTestCase(APITestCase):
     def test_list_lobbies_ranked_filter(self):
         url = reverse("lobby-list") + "?ranked=True"
 
-        Lobby(name="TEST_LOBBY_1", is_ranked=True).save()
-        Lobby(name="TEST_LOBBY_2", is_ranked=True).save()
+        Lobby(name="TEST_LOBBY_1", ranked=True).save()
+        Lobby(name="TEST_LOBBY_2", ranked=True).save()
 
         self.client.force_authenticate(user=self.user1)
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), Lobby.find(Lobby.is_ranked == 1).count())
+        self.assertEqual(len(response.data), Lobby.find(Lobby.ranked == 1).count())
 
     def test_list_lobbies_normal_filter(self):
         url = reverse("lobby-list") + "?ranked=False"
 
-        Lobby(name="TEST_LOBBY_1", is_ranked=False).save()
-        Lobby(name="TEST_LOBBY_2", is_ranked=False).save()
+        Lobby(name="TEST_LOBBY_1", ranked=False).save()
+        Lobby(name="TEST_LOBBY_2", ranked=False).save()
 
         self.client.force_authenticate(user=self.user1)
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), Lobby.find(Lobby.is_ranked == 0).count())
+        self.assertEqual(len(response.data), Lobby.find(Lobby.ranked == 0).count())

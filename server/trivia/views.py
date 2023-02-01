@@ -35,7 +35,7 @@ class LobbyViewSet(ViewSet):
             is_ranked_filter = None
 
         if is_ranked_filter:
-            lobbies = Lobby.find(Lobby.is_ranked == int(is_ranked_filter)).all()
+            lobbies = Lobby.find(Lobby.ranked == int(is_ranked_filter)).all()
         else:
             lobbies = Lobby.find().all()
 
