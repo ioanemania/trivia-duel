@@ -17,3 +17,9 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.save()
 
         return user
+
+
+class UserRankSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["username", "rank"]
