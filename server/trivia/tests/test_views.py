@@ -122,7 +122,7 @@ class LobbyViewSetTestCase(APITestCase):
         url = reverse("lobby-list") + "?ranked=True"
 
         Lobby(name="TEST_LOBBY_1", ranked=True).save()
-        Lobby(name="TEST_LOBBY_2", ranked=True).save()
+        Lobby(name="TEST_LOBBY_2", ranked=False).save()
 
         self.client.force_authenticate(user=self.user1)
         response = self.client.get(url)
@@ -133,7 +133,7 @@ class LobbyViewSetTestCase(APITestCase):
     def test_list_lobbies_normal_filter(self):
         url = reverse("lobby-list") + "?ranked=False"
 
-        Lobby(name="TEST_LOBBY_1", ranked=False).save()
+        Lobby(name="TEST_LOBBY_1", ranked=True).save()
         Lobby(name="TEST_LOBBY_2", ranked=False).save()
 
         self.client.force_authenticate(user=self.user1)
