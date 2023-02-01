@@ -1,9 +1,10 @@
+from typing import Optional
+
 import json
 
 from contextlib import suppress
 
 import asyncio
-import requests
 from requests.auth import AuthBase
 
 import websockets
@@ -141,7 +142,7 @@ class GameScreen(Screen):
     def __init__(self, lobby: str, token: str):
         self.lobby = lobby
         self.token = token
-        self.ws: websockets.WebSocketClientProtocol | None = None
+        self.ws: Optional[websockets.WebSocketClientProtocol] = None
 
         self.questions: dict | None = None
         self.current_question: int = 0
