@@ -7,7 +7,7 @@ from redis_om.model.model import NotFoundError
 
 from .serializers import LobbySerializer
 from .models import Lobby
-from .utils import generate_lobby_token_and_data
+from .utils import generate_lobby_token_and_data, parse_boolean_string
 
 
 class LobbyViewSet(ViewSet):
@@ -27,7 +27,18 @@ class LobbyViewSet(ViewSet):
         return Response(data={"token": token}, status=status.HTTP_201_CREATED)
 
     def list(self, request):
-        lobbies = Lobby.find().all()
+        is_ranked_param = request.query_params.get("ranked", "")
+
+        try:
+            is_ranked_filter = parse_boolean_string(is_ranked_param)
+        except ValueError:
+            is_ranked_filter = None
+
+        if is_ranked_filter:
+            lobbies = Lobby.find(Lobby.is_ranked == int(is_ranked_filter)).all()
+        else:
+            lobbies = Lobby.find().all()
+
         serializer = self.serializer_class(instance=lobbies, many=True)
 
         return Response(data=serializer.data, status=status.HTTP_200_OK)

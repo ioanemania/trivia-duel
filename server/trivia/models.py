@@ -20,14 +20,14 @@ class Lobby(JsonModel):
     users: Dict[Token, PlayerData] = {}
     current_answer_count: int = 0
     game_started: bool = False
-    is_ranked: bool = False
+    is_ranked: int = Field(index=True, default=0)
 
 
 class Game(models.Model):
     user = models.ForeignKey(User, related_name="games", on_delete=models.CASCADE)
     rank = models.PositiveIntegerField()
-    type = models.CharField(max_length=10)
-    status = models.CharField(max_length=10)
+    type = models.CharField(max_length=10)  # TODO: Should be a choice
+    status = models.CharField(max_length=10)  # TODO: Should be a choice
     extra_data = models.JSONField(null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
