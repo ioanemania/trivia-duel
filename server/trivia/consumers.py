@@ -43,15 +43,13 @@ class GameConsumer(JsonWebsocketConsumer):
         lobby.user_count += 1
         lobby.save()
 
-        self.user_id = lobby.users.get(self.token)['user_id']
+        self.user_id = lobby.users.get(self.token)["user_id"]
 
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
 
         if lobby.user_count == 2:
             questions = get_questions()
-            self.send_event_to_lobby("game.start", {
-                "questions": questions
-            })
+            self.send_event_to_lobby("game.start", {"questions": questions})
 
         raise AcceptConnection()
 
@@ -68,25 +66,22 @@ class GameConsumer(JsonWebsocketConsumer):
         async_to_sync(self.channel_layer.group_discard)(self.lobby_name, self.channel_name)
 
     def receive_json(self, content: dict, **kwargs):
-        if content['type'] == "question.answered":
+        if content["type"] == "question.answered":
             lobby = Lobby.get(self.lobby_name)
 
             if lobby.current_answer_count > 1:
                 return
 
-            if not content['correctly']:
-                lobby.users[self.token]['hp'] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[content['difficulty']]
+            if not content["correctly"]:
+                lobby.users[self.token]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[content["difficulty"]]
 
             self.send_event_to_lobby(
                 "opponent.answered",
-                {
-                    "user_id": self.user_id,
-                    "correctly": content['correctly']
-                }
+                {"user_id": self.user_id, "correctly": content["correctly"]},
             )
 
             if lobby.current_answer_count == 1:
-                if any(user for user in lobby.users.values() if user['hp'] <= 0):
+                if any(user for user in lobby.users.values() if user["hp"] <= 0):
                     self.send_event_to_lobby("game.end")
                 else:
                     lobby.current_answer_count = 0
@@ -100,13 +95,7 @@ class GameConsumer(JsonWebsocketConsumer):
         if data is None:
             data = {}
 
-        async_to_sync(self.channel_layer.group_send)(
-            self.lobby_name,
-            {
-                "type": msg_type,
-                **data
-            }
-        )
+        async_to_sync(self.channel_layer.group_send)(self.lobby_name, {"type": msg_type, **data})
 
     def game_start(self, event: dict):
         self.send_json(event)
@@ -114,12 +103,12 @@ class GameConsumer(JsonWebsocketConsumer):
     def game_end(self, event: dict):
         lobby = Lobby.get(self.lobby_name)
 
-        player_hp = lobby.users[self.token]['hp']
+        player_hp = lobby.users[self.token]["hp"]
         opponent_hp = None
 
         for token in lobby.users.keys():
             if token != self.token:
-                opponent_hp = lobby.users[token]['hp']
+                opponent_hp = lobby.users[token]["hp"]
                 break
 
         if player_hp == opponent_hp:
@@ -142,16 +131,16 @@ class GameConsumer(JsonWebsocketConsumer):
             rank=user.rank,
             status=status,
             # TODO: Use choices
-            type="ranked" if lobby.ranked else "casual"
+            type="ranked" if lobby.ranked else "casual",
         )
         game.save()
 
-        event.update({'status': status, 'rank_gain': rank_gain})
+        event.update({"status": status, "rank_gain": rank_gain})
         self.send_json(event)
 
     def question_next(self, event: dict):
         self.send_json(event)
 
     def opponent_answered(self, event: dict):
-        if not event['user_id'] == self.user_id:
+        if not event["user_id"] == self.user_id:
             self.send_json(event)

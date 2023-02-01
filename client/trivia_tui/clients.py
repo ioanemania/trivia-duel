@@ -9,12 +9,12 @@ from requests.auth import AuthBase
 
 
 class TokenAuth(AuthBase):
-    def __init__(self, token: str, auth_scheme='Bearer'):
+    def __init__(self, token: str, auth_scheme="Bearer"):
         self.token = token
         self.auth_scheme = auth_scheme
 
     def __call__(self, request):
-        request.headers['Authorization'] = f'{self.auth_scheme} {self.token}'
+        request.headers["Authorization"] = f"{self.auth_scheme} {self.token}"
         return request
 
 
@@ -36,32 +36,30 @@ class TriviaClient:
 
         auth = TokenAuth(self.access_token) if authenticated else None
 
-        response = requests.request(
-            method=method,
-            url=url,
-            auth=auth,
-            *args,
-            **kwargs
-        )
+        response = requests.request(method=method, url=url, auth=auth, *args, **kwargs)
         response.raise_for_status()
 
         return response
 
     def register(self, username: str, password: str) -> None:
         url = self.api_base_url + "/api/user/register/"
-        self._make_request("POST", url=url, authenticated=False, json={
-            "username": username,
-            "password": password
-        })
+        self._make_request(
+            "POST",
+            url=url,
+            authenticated=False,
+            json={"username": username, "password": password},
+        )
 
     def login(self, username: str, password: str) -> None:
         url = self.api_base_url + "/api/token/"
 
-        data = self._make_request("POST", url=url, authenticated=False, json={
-            "username": username,
-            "password": password
-        }).json()
-        self.access_token, self.refresh_token = data['access'], data['refresh']
+        data = self._make_request(
+            "POST",
+            url=url,
+            authenticated=False,
+            json={"username": username, "password": password},
+        ).json()
+        self.access_token, self.refresh_token = data["access"], data["refresh"]
 
     def get_lobbies(self, ranked: Optional[bool] = None) -> list:
         url_components = (self.api_base_url, "/api/trivia/lobbies/")
@@ -75,10 +73,7 @@ class TriviaClient:
     def create_lobby(self, lobby_name: str, ranked: bool) -> dict:
         url = self.api_base_url + "/api/trivia/lobbies/"
 
-        return self._make_request("POST", url=url, json={
-            "name": lobby_name,
-            "ranked": ranked
-        }).json()
+        return self._make_request("POST", url=url, json={"name": lobby_name, "ranked": ranked}).json()
 
     def join_lobby(self, lobby_name: str) -> dict:
         url = self.api_base_url + f"/api/trivia/lobbies/{lobby_name}/join/"

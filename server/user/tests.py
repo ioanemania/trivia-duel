@@ -9,10 +9,7 @@ User = get_user_model()
 class RegisterUserViewTestCase(APITestCase):
     def test_register_user(self):
         url = reverse("user-register")
-        data = {
-            "username": "user",
-            "password": "user"
-        }
+        data = {"username": "user", "password": "user"}
 
         response = self.client.post(url, data=data, format="json")
 

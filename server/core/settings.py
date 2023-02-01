@@ -32,18 +32,15 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     "daphne",
-
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     "channels",
     "rest_framework",
     "rest_framework_simplejwt",
-
     "user",
     "trivia",
 ]
@@ -92,7 +89,7 @@ DATABASES = {
 
 # Password validation
 # https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
-AUTH_USER_MODEL = 'user.User'
+AUTH_USER_MODEL = "user.User"
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -135,26 +132,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CHANNELS
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
-}
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # DRF
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
-}
+REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",)}
 
 # TRIVIA API
 
 TRIVIA_API_URL = "https://opentdb.com/api.php?amount=10"
 
-QUESTION_DIFFICULTY_DAMAGE_MAP = {
-    "easy": 10,
-    "medium": 20,
-    "hard": 25
-}
+QUESTION_DIFFICULTY_DAMAGE_MAP = {"easy": 10, "medium": 20, "hard": 25}

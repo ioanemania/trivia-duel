@@ -19,12 +19,12 @@ from .messages import QuestionAnswered
 
 
 class TokenAuth(AuthBase):
-    def __init__(self, token: str, auth_scheme='Bearer'):
+    def __init__(self, token: str, auth_scheme="Bearer"):
         self.token = token
         self.auth_scheme = auth_scheme
 
     def __call__(self, request):
-        request.headers['Authorization'] = f'{self.auth_scheme} {self.token}'
+        request.headers["Authorization"] = f"{self.auth_scheme} {self.token}"
         return request
 
 
@@ -110,7 +110,7 @@ class HostScreen(Screen):
         data = self.app.client.create_lobby(lobby_name, ranked=self.game_type == "ranked")
 
         self.app.install_screen(self)
-        self.app.switch_screen(GameScreen(lobby_name, data['token']))
+        self.app.switch_screen(GameScreen(lobby_name, data["token"]))
         self.app.uninstall_screen(self)
 
     def on_screen_resume(self):
@@ -126,7 +126,7 @@ class JoinScreen(Screen):
         lobbies = self.app.client.get_lobbies(ranked=self.game_type == "ranked")
 
         for lobby in lobbies:
-            yield Button(lobby['name'])
+            yield Button(lobby["name"])
 
     def on_button_pressed(self, event: Button.Pressed):
         lobby_name = event.button.label
@@ -134,7 +134,7 @@ class JoinScreen(Screen):
         data = self.app.client.join_lobby(lobby_name)
 
         self.app.install_screen(self)
-        self.app.switch_screen(GameScreen(lobby_name, data['token']))
+        self.app.switch_screen(GameScreen(lobby_name, data["token"]))
         self.app.uninstall_screen(self)
 
 
@@ -163,14 +163,14 @@ class GameScreen(Screen):
                 await self.handle_ws_event(json.loads(event))
 
     async def handle_ws_event(self, event) -> None:
-        if event['type'] == "game.start":
-            self.questions = event['questions']
+        if event["type"] == "game.start":
+            self.questions = event["questions"]
             self.current_question = 1
             await self.next_question()
-        elif event['type'] == "question.next":
+        elif event["type"] == "question.next":
             await self.next_question()
-        elif event['type'] == "game.end":
-            await self.game_end(event['status'])
+        elif event["type"] == "game.end":
+            await self.game_end(event["status"])
 
     async def next_question(self) -> None:
         self.current_question += 1
@@ -180,11 +180,15 @@ class GameScreen(Screen):
         await self.mount(Question(**self.questions[self.current_question]))
 
     async def on_question_answered(self, event: QuestionAnswered):
-        await self.ws.send(json.dumps({
-            "type": "question.answered",
-            "correctly": event.correctly,
-            "difficulty": event.difficulty
-        }))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "question.answered",
+                    "correctly": event.correctly,
+                    "difficulty": event.difficulty,
+                }
+            )
+        )
 
     async def game_end(self, status: str) -> None:
         await self.clear_widgets()

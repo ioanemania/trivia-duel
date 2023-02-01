@@ -23,15 +23,11 @@ import trivia.urls
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-
     path("api/token/", TokenObtainPairView.as_view(), name="token-obtain"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-
     path("api/user/", include("user.urls")),
     path("api/trivia/", include("trivia.urls")),
 ]
 
 
-websocket_urlpatterns = [
-    path("ws/trivia/", URLRouter(trivia.urls.websocket_urlpatterns))
-]
+websocket_urlpatterns = [path("ws/trivia/", URLRouter(trivia.urls.websocket_urlpatterns))]

@@ -44,10 +44,7 @@ class GameConsumerTestCase(TestCase):
         self.user2_token, user2_data = generate_lobby_token_and_data(self.user2)
 
         self.lobby = Lobby(name=self.lobby_name)
-        self.lobby.users = {
-            self.user1_token: user1_data,
-            self.user2_token: user2_data
-        }
+        self.lobby.users = {self.user1_token: user1_data, self.user2_token: user2_data}
         self.lobby.save()
 
     def tearDown(self):

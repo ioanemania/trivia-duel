@@ -17,7 +17,7 @@ def get_questions() -> list[dict]:
     response = requests.get(settings.TRIVIA_API_URL)
     response.raise_for_status()
 
-    return response.json()['results']
+    return response.json()["results"]
 
 
 def parse_boolean_string(value: str) -> bool:

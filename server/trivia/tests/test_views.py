@@ -43,7 +43,7 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         lobby = Lobby.get(lobby_name)
-        token = response.data['token']
+        token = response.data["token"]
 
         self.assertEqual(lobby.name, lobby_name)
         self.assertIn(token, lobby.users.keys())
@@ -62,7 +62,7 @@ class LobbyViewSetTestCase(APITestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        token = response.data['token']
+        token = response.data["token"]
         lobby = Lobby.get(self.lobby_name)
         self.assertIn(token, lobby.users.keys())
 

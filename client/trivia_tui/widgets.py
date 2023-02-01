@@ -9,8 +9,17 @@ from .messages import QuestionAnswered, CountdownFinished
 
 
 class Question(Static):
-    def __init__(self, question: str, incorrect_answers: list[str], correct_answer: str, difficulty: str, category: str,
-                 type: str, *args, **kwargs):
+    def __init__(
+        self,
+        question: str,
+        incorrect_answers: list[str],
+        correct_answer: str,
+        difficulty: str,
+        category: str,
+        type: str,
+        *args,
+        **kwargs,
+    ):
         self.question = question
         self.difficulty = difficulty
         self.incorrect_answers = incorrect_answers

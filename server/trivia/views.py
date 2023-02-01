@@ -53,8 +53,11 @@ class LobbyViewSet(ViewSet):
         if len(lobby.users) > 1:
             return Response(data={"detail": "Lobby is full"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.user.id in (user['user_id'] for user in lobby.users.values()):
-            return Response(data={"detail": "Already joined the lobby"}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user.id in (user["user_id"] for user in lobby.users.values()):
+            return Response(
+                data={"detail": "Already joined the lobby"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         token, data = generate_lobby_token_and_data(request.user)
 
