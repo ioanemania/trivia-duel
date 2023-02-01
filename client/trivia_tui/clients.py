@@ -80,6 +80,11 @@ class TriviaClient:
 
         return self._make_request("POST", url=url).json()
 
+    def get_rankings(self) -> list[dict]:
+        url = self.api_base_url + "/api/user/ranking/"
+
+        return self._make_request("GET", url=url).json()
+
     def ws_join_lobby(self, lobby_name: str, token: str) -> Task[websockets.WebSocketClientProtocol]:
         url = self.ws_base_url + f"/ws/trivia/lobbies/{lobby_name}?{token}"
 

@@ -12,7 +12,7 @@ import websockets
 from textual import events
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, Static, DataTable
 
 from .widgets import Question, GameStatus
 from .messages import QuestionAnswered
@@ -54,12 +54,14 @@ class LoginOrRegisterScreen(Screen):
 class MainMenuScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Button("Play", id="btn-play")
-        yield Button("Leaderboards", disabled=True)
+        yield Button("Leaderboard", id="btn-leaderboard")
         yield Button("History", disabled=True)
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-play":
             await self.app.push_screen(PlayMenuScreen())
+        elif event.button.id == "btn-leaderboard":
+            await self.app.push_screen(UserRankingScreen())
 
 
 class PlayMenuScreen(Screen):
@@ -206,3 +208,17 @@ class GameScreen(Screen):
             await child.remove()
 
         self.set_focus(None)
+
+
+class UserRankingScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield DataTable()
+
+    def on_mount(self):
+        table = self.query_one(DataTable)
+        table.add_columns("user", "rank")
+
+        rankings = ((ranking["username"], str(ranking["rank"])) for ranking in self.app.client.get_rankings())
+        table.add_rows(rankings)
+
+        table.focus()
