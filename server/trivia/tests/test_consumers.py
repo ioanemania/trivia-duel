@@ -26,6 +26,8 @@ Lobby.Meta.database = test_db
 
 
 class GameConsumerTestCase(TestCase):
+    fixtures = ["users.json"]
+
     @classmethod
     def setUpTestData(cls):
         with open(FIXTURES_PATH / "questions.json") as file:
@@ -34,11 +36,7 @@ class GameConsumerTestCase(TestCase):
         cls.lobby_name = "TEST_LOBBY_NAME"
 
     def setUp(self):
-        self.user1 = User.objects.create_user(username="user1", password="user1")
-        self.user2 = User.objects.create_user(username="user2", password="user2")
-
-        self.user1.save()
-        self.user2.save()
+        self.user1, self.user2 = User.objects.all()[:2]
 
         self.user1_token, user1_data = generate_lobby_token_and_data(self.user1)
         self.user2_token, user2_data = generate_lobby_token_and_data(self.user2)
@@ -88,3 +86,22 @@ class GameConsumerTestCase(TestCase):
 
         await comm2.disconnect()
         await comm1.disconnect()
+
+    @patch("trivia.consumers.get_questions")
+    async def test_user_disconnects_when_game_in_progress(self, mock_get_questions):
+        mock_get_questions.return_value = self.questions
+
+        comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
+        connected1, _ = await comm1.connect()
+
+        comm2 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user2_token}")
+        connected2, _ = await comm2.connect()
+
+        await comm1.disconnect()
+
+        comm2_game_start = await comm2.receive_json_from()
+        comm2_game_end = await comm2.receive_json_from()
+
+        self.assertEqual(comm2_game_end["status"], "win")
+
+        await comm2.disconnect()

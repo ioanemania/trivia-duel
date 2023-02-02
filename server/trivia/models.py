@@ -1,17 +1,13 @@
 from typing import Dict, TypedDict
+from enum import Enum
 
 from django.db import models
 from django.contrib.auth import get_user_model
 from redis_om import JsonModel, Field, Migrator
 
+from trivia.types import Token, PlayerData, LobbyState
+
 User = get_user_model()
-
-Token = str
-
-
-class PlayerData(TypedDict):
-    user_id: int
-    hp: int
 
 
 class Lobby(JsonModel):
@@ -19,7 +15,7 @@ class Lobby(JsonModel):
     user_count: int = 0
     users: Dict[Token, PlayerData] = {}
     current_answer_count: int = 0
-    game_started: bool = False
+    state: LobbyState = LobbyState.WAITING
     ranked: int = Field(index=True, default=0)
 
 
