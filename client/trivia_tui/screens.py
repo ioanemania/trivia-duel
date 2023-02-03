@@ -14,6 +14,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable
 
+from .utils import decode_questions
 from .widgets import Question, GameStatus
 from .messages import QuestionAnswered
 
@@ -168,7 +169,7 @@ class GameScreen(Screen):
         if event["type"] == "game.start":
             await self.next_question()
         elif event["type"] == "question.data":
-            self.questions = event["questions"]
+            self.questions = decode_questions(event["questions"])
             self.current_question = 0
         elif event["type"] == "question.next":
             await self.next_question()
