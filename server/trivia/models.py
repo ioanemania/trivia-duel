@@ -15,6 +15,7 @@ class Lobby(JsonModel):
     user_count: int = 0
     users: Dict[Token, PlayerData] = {}
     current_answer_count: int = 0
+    current_question_count: int = 0
     state: LobbyState = LobbyState.WAITING
     ranked: int = Field(index=True, default=0)
 

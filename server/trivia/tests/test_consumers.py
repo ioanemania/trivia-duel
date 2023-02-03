@@ -99,9 +99,34 @@ class GameConsumerTestCase(TestCase):
 
         await comm1.disconnect()
 
-        comm2_game_start = await comm2.receive_json_from()
+        await comm2.receive_json_from()  # game.start
+        await comm2.receive_json_from()  # question.data
         comm2_game_end = await comm2.receive_json_from()
 
         self.assertEqual(comm2_game_end["status"], "win")
 
+        await comm2.disconnect()
+
+    @patch("trivia.consumers.get_questions")
+    async def test_questions_are_continuously_obtained(self, mock_get_questions):
+        mock_get_questions.return_value = self.questions
+
+        data = {"type": "question.answered", "correctly": True, "difficulty": "hard"}
+
+        comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
+        connected1, _ = await comm1.connect()
+
+        comm2 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user2_token}")
+        connected2, _ = await comm2.connect()
+
+        for i in range(10):  # TODO: refactor hardcoded value
+            await comm1.send_json_to(data)
+            await comm2.send_json_to(data)
+
+            await comm1.receive_json_from()
+            await comm2.receive_json_from()
+
+        self.assertEqual(mock_get_questions.call_count, 2)
+
+        await comm1.disconnect()
         await comm2.disconnect()

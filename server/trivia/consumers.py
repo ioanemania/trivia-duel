@@ -50,7 +50,8 @@ class GameConsumer(JsonWebsocketConsumer):
         if lobby.user_count == 2:
             questions = get_questions()
             lobby.state = LobbyState.IN_PROGRESS
-            self.send_event_to_lobby("game.start", {"questions": questions})
+            self.send_event_to_lobby("question.data", {"questions": questions})
+            self.send_event_to_lobby("game.start")
 
         lobby.save()
 
@@ -85,6 +86,7 @@ class GameConsumer(JsonWebsocketConsumer):
         if content["type"] == "question.answered":
             lobby = Lobby.get(self.lobby_name)
 
+            # receiving question.answered event more than two times for a single question is unexpected, ignore it
             if lobby.current_answer_count > 1:
                 return
 
@@ -96,16 +98,30 @@ class GameConsumer(JsonWebsocketConsumer):
                 {"user_id": self.user_id, "correctly": content["correctly"]},
             )
 
-            if lobby.current_answer_count == 1:
-                if any(user for user in lobby.users.values() if user["hp"] <= 0):
-                    self.send_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
-                else:
-                    lobby.current_answer_count = 0
-                    self.send_event_to_lobby("question.next")
-            else:
+            # question has been answered for the first time
+            if lobby.current_answer_count == 0:
                 lobby.current_answer_count += 1
+                lobby.save()
+                return
 
+            # otherwise, both users have answered the question
+            if any(user for user in lobby.users.values() if user["hp"] <= 0):
+                self.send_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
+                return
+
+            # current set of questions has been exhausted, obtain new ones
+            if lobby.current_question_count == 8:  # TODO: refactor hardcoded value
+                lobby.current_question_count = 0
+
+                questions = get_questions()
+                self.send_event_to_lobby("question.data", {"questions": questions})
+            else:
+                lobby.current_question_count += 1
+
+            lobby.current_answer_count = 0
             lobby.save()
+
+            self.send_event_to_lobby("question.next")
 
     def send_event_to_lobby(self, msg_type: str, data: dict = None) -> None:
         if data is None:
@@ -113,7 +129,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         async_to_sync(self.channel_layer.group_send)(self.lobby_name, {"type": msg_type, **data})
 
-    def send_game_end(self, users: dict[UserId, GameStatus]):
+    def send_game_end(self, users: dict[UserId, GameStatus]) -> None:
         self.send_event_to_lobby("game.end", {"users": users})
 
     def game_start(self, event: dict):
@@ -155,6 +171,9 @@ class GameConsumer(JsonWebsocketConsumer):
                 "rank_gain": rank_gain,
             }
         )
+
+    def question_data(self, event: dict):
+        self.send_json(event)
 
     def question_next(self, event: dict):
         self.send_json(event)
