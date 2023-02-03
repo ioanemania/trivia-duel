@@ -166,9 +166,10 @@ class GameScreen(Screen):
 
     async def handle_ws_event(self, event) -> None:
         if event["type"] == "game.start":
-            self.questions = event["questions"]
-            self.current_question = 1
             await self.next_question()
+        elif event["type"] == "question.data":
+            self.questions = event["questions"]
+            self.current_question = 0
         elif event["type"] == "question.next":
             await self.next_question()
         elif event["type"] == "game.end":
