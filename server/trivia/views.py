@@ -9,7 +9,7 @@ from redis_om.model.model import NotFoundError
 from .serializers import LobbySerializer
 from .models import Lobby, Game, UserGame
 from .types import GameType, GameStatus
-from .utils import generate_lobby_token_and_data, parse_boolean_string, get_questions
+from .utils import generate_lobby_token_and_data, parse_boolean_string, TriviaAPIClient
 
 
 class LobbyViewSet(ViewSet):
@@ -74,7 +74,7 @@ class TrainingView(APIView):
 
     def get(self, request):
         """Gives questions to the client for training"""
-        questions = get_questions()
+        questions = TriviaAPIClient.get_questions()
 
         return Response(data=questions)
 

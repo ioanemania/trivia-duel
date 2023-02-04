@@ -9,7 +9,7 @@ from redis_om.model.model import NotFoundError
 
 from .models import Lobby, Game, LobbyState, UserGame
 from .types import GameEndEvent, UserId, PlayerData, GameStatus, UserStatus, GameType
-from .utils import get_questions
+from .utils import TriviaAPIClient
 
 User = get_user_model()
 
@@ -48,7 +48,8 @@ class GameConsumer(JsonWebsocketConsumer):
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
 
         if lobby.user_count == 2:
-            questions = get_questions()
+            lobby.trivia_token = TriviaAPIClient.get_token()
+            questions = TriviaAPIClient.get_questions(token=lobby.trivia_token)
             lobby.state = LobbyState.IN_PROGRESS
             self.send_event_to_lobby("question.data", {"questions": questions})
             self.send_event_to_lobby("game.start")
@@ -113,7 +114,7 @@ class GameConsumer(JsonWebsocketConsumer):
             if lobby.current_question_count == 8:  # TODO: refactor hardcoded value
                 lobby.current_question_count = 0
 
-                questions = get_questions()
+                questions = TriviaAPIClient.get_questions(lobby.trivia_token)
                 self.send_event_to_lobby("question.data", {"questions": questions})
             else:
                 lobby.current_question_count += 1

@@ -142,5 +142,6 @@ REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.a
 # TRIVIA API
 
 TRIVIA_API_URL = "https://opentdb.com/api.php?amount=10"
+TRIVIA_API_TOKEN_URL = "https://opentdb.com/api_token.php?command=request"
 
 QUESTION_DIFFICULTY_DAMAGE_MAP = {"easy": 10, "medium": 20, "hard": 25}

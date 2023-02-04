@@ -46,7 +46,19 @@ class GameConsumerTestCase(TestCase):
         lobby.users = {self.user1_token: user1_data, self.user2_token: user2_data}
         lobby.save()
 
+        self.get_questions_patcher = patch("trivia.consumers.TriviaAPIClient.get_questions")
+        self.get_token_patcher = patch("trivia.consumers.TriviaAPIClient.get_token")
+
+        self.mock_get_questions = self.get_questions_patcher.start()
+        self.mock_get_token = self.get_token_patcher.start()
+
+        self.mock_get_questions.return_value = self.questions
+        self.mock_get_token.return_value = "FAKE_TOKEN"
+
     def tearDown(self):
+        self.get_questions_patcher.stop()
+        self.get_token_patcher.stop()
+
         for key in test_db.scan_iter("*"):
             test_db.delete(key)
 
@@ -56,10 +68,7 @@ class GameConsumerTestCase(TestCase):
 
         self.assertTrue(not connected)
 
-    @patch("trivia.consumers.get_questions")
-    async def test_two_users_connect(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_two_users_connect(self):
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
         connected1, _ = await comm1.connect()
 
@@ -70,10 +79,7 @@ class GameConsumerTestCase(TestCase):
 
         self.assertTrue(connected2)
 
-    @patch("trivia.consumers.get_questions")
-    async def test_more_than_two_users_connect(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_more_than_two_users_connect(self):
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
         connected1, _ = await comm1.connect()
 
@@ -88,10 +94,7 @@ class GameConsumerTestCase(TestCase):
         await comm2.disconnect()
         await comm1.disconnect()
 
-    @patch("trivia.consumers.get_questions")
-    async def test_user_disconnects_when_game_in_progress(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_user_disconnects_when_game_in_progress(self):
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
         connected1, _ = await comm1.connect()
 
@@ -108,10 +111,7 @@ class GameConsumerTestCase(TestCase):
 
         await comm2.disconnect()
 
-    @patch("trivia.consumers.get_questions")
-    async def test_questions_are_continuously_obtained(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_questions_are_continuously_obtained(self):
         data = {"type": "question.answered", "correctly": True, "difficulty": "hard"}
 
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
@@ -127,15 +127,12 @@ class GameConsumerTestCase(TestCase):
             await comm1.receive_json_from()
             await comm2.receive_json_from()
 
-        self.assertEqual(mock_get_questions.call_count, 2)
+        self.assertEqual(self.mock_get_questions.call_count, 2)
 
         await comm1.disconnect()
         await comm2.disconnect()
 
-    @patch("trivia.consumers.get_questions")
-    async def test_game_data_is_stored(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_game_data_is_stored(self):
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
         connected1, _ = await comm1.connect()
 
@@ -168,10 +165,7 @@ class GameConsumerTestCase(TestCase):
         self.assertEqual(user1_user_game_record.status, GameStatus.LOSS.value)
         self.assertEqual(user2_user_game_record.status, GameStatus.WIN.value)
 
-    @patch("trivia.consumers.get_questions")
-    async def test_ranks_updating_correctly(self, mock_get_questions):
-        mock_get_questions.return_value = self.questions
-
+    async def test_ranks_updating_correctly(self):
         comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
         connected1, _ = await comm1.connect()
 

@@ -159,7 +159,7 @@ class TrainingViewTestCase(APITestCase):
         with open(FIXTURES_PATH / "questions.json") as file:
             cls.questions = json.load(file)
 
-    @patch("trivia.views.get_questions")
+    @patch("trivia.consumers.TriviaAPIClient.get_questions")
     def test_get_training_questions(self, mock_get_questions):
         mock_get_questions.return_value = self.questions
 
