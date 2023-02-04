@@ -1,4 +1,4 @@
-from typing import Optional, Iterable
+from typing import Optional
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
@@ -7,8 +7,8 @@ from channels.generic.websocket import JsonWebsocketConsumer
 from channels.exceptions import DenyConnection, AcceptConnection
 from redis_om.model.model import NotFoundError
 
-from .models import Lobby, Game, LobbyState
-from .types import GameEndEvent, UserId, HP, PlayerData, GameStatus
+from .models import Lobby, Game, LobbyState, UserGame
+from .types import GameEndEvent, UserId, PlayerData, GameStatus, UserStatus, GameType
 from .utils import get_questions
 
 User = get_user_model()
@@ -72,7 +72,7 @@ class GameConsumer(JsonWebsocketConsumer):
         # If one of the users disconnected, but the game was still in progress declare the in game user a winner
         if lobby.state == LobbyState.IN_PROGRESS:
             opponent_user_id = next(user["user_id"] for user in lobby.users.values() if user["user_id"] != self.user_id)
-            self.send_game_end(
+            self.handle_game_end(
                 {
                     self.user_id: GameStatus.LOSS,
                     opponent_user_id: GameStatus.WIN,
@@ -106,7 +106,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
             # otherwise, both users have answered the question
             if any(user for user in lobby.users.values() if user["hp"] <= 0):
-                self.send_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
+                self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
                 return
 
             # current set of questions has been exhausted, obtain new ones
@@ -129,47 +129,44 @@ class GameConsumer(JsonWebsocketConsumer):
 
         async_to_sync(self.channel_layer.group_send)(self.lobby_name, {"type": msg_type, **data})
 
-    def send_game_end(self, users: dict[UserId, GameStatus]) -> None:
-        self.send_event_to_lobby("game.end", {"users": users})
+    def handle_game_end(self, users: dict[UserId, GameStatus]) -> None:
+        lobby = Lobby.get(self.lobby_name)
+        lobby.state = LobbyState.FINISHED
+        lobby.save()
+
+        game = Game(
+            type=GameType.RANKED if lobby.ranked else GameType.NORMAL,
+        )
+        game.save()
+
+        user_status_dict: dict[UserId, UserStatus] = {}
+        user_objects = User.objects.filter(pk__in=(users.keys()))
+        for user in user_objects:
+            status = users[user.pk]
+            rank_gain = self.determine_rank_gain_by_game_status(status)
+            if lobby.ranked:
+                user.rank = max(user.rank + rank_gain, 0)
+                user.save()
+
+            UserGame(
+                user=user,
+                game=game,
+                status=status,
+                rank=user.rank,
+            ).save()
+
+            user_status_dict[user.pk] = {"status": status, "rank_gain": rank_gain}
+
+        self.send_event_to_lobby("game.end", {"users": user_status_dict})
 
     def game_start(self, event: dict):
         self.send_json(event)
 
     def game_end(self, event: GameEndEvent):
-        lobby = Lobby.get(self.lobby_name)
-
-        player_status = event["users"][self.user_id]
-
-        match player_status:
-            case GameStatus.WIN:
-                rank_gain = 20
-            case GameStatus.LOSS:
-                rank_gain = -20
-            case GameStatus.DRAW:
-                rank_gain = 0
-            case _:
-                raise Exception("Undefined Status")
-
-        user = User.objects.get(pk=self.user_id)
-        if lobby.ranked:
-            user.rank += rank_gain
-            user.save()
-
-        game = Game(
-            user=user,
-            rank=user.rank,
-            status=player_status.name.lower(),
-            # TODO: Use choices
-            type="ranked" if lobby.ranked else "casual",
-        )
-        game.save()
+        user_status = event["users"][self.user_id]
 
         self.send_json(
-            {
-                "type": event["type"],
-                "status": player_status.name.lower(),
-                "rank_gain": rank_gain,
-            }
+            {"type": event["type"], "status": user_status["status"].name.lower(), "rank_gain": user_status["rank_gain"]}
         )
 
     def question_data(self, event: dict):
@@ -199,3 +196,14 @@ class GameConsumer(JsonWebsocketConsumer):
             user1_id: user1_status,
             user2_id: user2_status,
         }
+
+    def determine_rank_gain_by_game_status(self, status: GameStatus) -> int:  # noqa
+        match status:
+            case GameStatus.WIN:
+                return 20
+            case GameStatus.LOSS:
+                return -20
+            case GameStatus.DRAW:
+                return 0
+            case _:
+                raise Exception("Undefined Status")

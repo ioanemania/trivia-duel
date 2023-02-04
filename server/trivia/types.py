@@ -1,5 +1,6 @@
-from enum import Enum
 from typing import TypedDict
+
+from django.db.models import IntegerChoices
 
 Token = str
 UserId = int
@@ -11,16 +12,27 @@ class PlayerData(TypedDict):
     hp: HP
 
 
-class LobbyState(Enum):
+class GameType(IntegerChoices):
+    RANKED = 1
+    NORMAL = 2
+    TRAINING = 3
+
+
+class LobbyState(IntegerChoices):
     WAITING = 1
     IN_PROGRESS = 2
     FINISHED = 3
 
 
-class GameStatus(Enum):
+class GameStatus(IntegerChoices):
     DRAW = 1
     LOSS = 2
     WIN = 3
+
+
+class UserStatus(TypedDict):
+    status: GameStatus
+    rank_gain: int
 
 
 class BaseEvent(TypedDict):
@@ -28,4 +40,4 @@ class BaseEvent(TypedDict):
 
 
 class GameEndEvent(BaseEvent):
-    users: dict[UserId, GameStatus]
+    users: dict[UserId, UserStatus]
