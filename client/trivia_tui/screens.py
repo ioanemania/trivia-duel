@@ -17,7 +17,7 @@ from textual.widgets import Button, Input, Static, DataTable
 
 from .utils import decode_questions
 from .widgets import Question, GameStatus
-from .messages import QuestionAnswered
+from .messages import QuestionAnswered, FiftyFiftyTriggered
 
 
 class TokenAuth(AuthBase):
@@ -195,6 +195,7 @@ class GameScreen(Screen):
 
         self.questions: dict | None = None
         self.current_question: int = 0
+        self.fifty_fifty_chance: bool = True
 
         super().__init__()
 
@@ -228,6 +229,18 @@ class GameScreen(Screen):
         await self.clear_widgets()
 
         await self.mount(Question(**self.questions[self.current_question]))
+
+        if self.fifty_fifty_chance:
+            await self.mount(Button("50/50", id="btn-5050"))
+
+    async def on_button_pressed(self, event: Button.Pressed):
+        match event.button.id:
+            case "btn-5050":
+                self.fifty_fifty_chance = False
+                await event.button.remove()
+                await self.query_one(Question).post_message(FiftyFiftyTriggered(self))
+            case _:
+                raise Exception("Unexpected button event received")
 
     async def on_question_answered(self, event: QuestionAnswered):
         await self.ws.send(

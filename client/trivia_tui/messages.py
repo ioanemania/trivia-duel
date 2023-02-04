@@ -20,3 +20,7 @@ class QuestionAnswered(Message):
         self.correctly = correctly
         self.difficulty = difficulty
         super().__init__(sender)
+
+
+class FiftyFiftyTriggered(Message):
+    bubble = False

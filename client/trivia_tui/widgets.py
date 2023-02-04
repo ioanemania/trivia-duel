@@ -1,3 +1,5 @@
+import random
+
 from typing import Optional
 
 from textual.app import ComposeResult, RenderableType
@@ -5,7 +7,7 @@ from textual.widgets import Static, Button
 from textual.reactive import reactive
 from textual.timer import Timer
 
-from .messages import QuestionAnswered, CountdownFinished
+from .messages import QuestionAnswered, CountdownFinished, FiftyFiftyTriggered
 
 
 class Question(Static):
@@ -58,6 +60,15 @@ class Question(Static):
         if not self.question_answered:
             self.disable_answers()
             await self.emit(QuestionAnswered(self, False, self.difficulty))
+
+    async def on_fifty_fifty_triggered(self, _event: FiftyFiftyTriggered):
+        if self.type == "boolean":
+            return
+
+        random_incorrect_answers = random.sample(self.incorrect_answers, k=2)
+        for answer_button in self.query(Button):
+            if str(answer_button.label) in random_incorrect_answers:
+                answer_button.disabled = True
 
     def disable_answers(self) -> None:
         for button in self.query(Button):
