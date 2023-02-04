@@ -1,10 +1,18 @@
+import json
+from pathlib import Path
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 from redis_om import get_redis_connection
 
-from trivia.models import Lobby
+from core.settings import BASE_DIR
+from trivia.models import Lobby, UserGame
+from trivia.types import GameType
+
+FIXTURES_PATH = BASE_DIR / "fixtures"
 
 User = get_user_model()
 
@@ -141,3 +149,36 @@ class LobbyViewSetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), Lobby.find(Lobby.ranked == 0).count())
+
+
+class TrainingViewTestCase(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user1 = User.objects.create_user(username="user1", password="user1")
+
+        with open(FIXTURES_PATH / "questions.json") as file:
+            cls.questions = json.load(file)
+
+    @patch("trivia.views.get_questions")
+    def test_get_training_questions(self, mock_get_questions):
+        mock_get_questions.return_value = self.questions
+
+        url = reverse("train")
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, self.questions)
+
+    def test_post_training_result(self):
+        url = reverse("train")
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        games = self.user1.games.all()
+        self.assertEqual(len(games), 1)
+        self.assertEqual(games[0].type, GameType.TRAINING)

@@ -1,3 +1,4 @@
+from rest_framework.views import APIView
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 from rest_framework import status
@@ -6,8 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from redis_om.model.model import NotFoundError
 
 from .serializers import LobbySerializer
-from .models import Lobby
-from .utils import generate_lobby_token_and_data, parse_boolean_string
+from .models import Lobby, Game, UserGame
+from .types import GameType, GameStatus
+from .utils import generate_lobby_token_and_data, parse_boolean_string, get_questions
 
 
 class LobbyViewSet(ViewSet):
@@ -65,3 +67,23 @@ class LobbyViewSet(ViewSet):
         lobby.save()
 
         return Response(data={"token": token}, status=status.HTTP_200_OK)
+
+
+class TrainingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Gives questions to the client for training"""
+        questions = get_questions()
+
+        return Response(data=questions)
+
+    def post(self, request):
+        """Saves a record of a training"""
+        game = Game(type=GameType.TRAINING)
+        game.save()
+
+        user_game = UserGame(user=request.user, game=game, status=GameStatus.WIN, rank=request.user.rank)
+        user_game.save()
+
+        return Response(status=status.HTTP_201_CREATED)

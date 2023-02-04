@@ -11,12 +11,13 @@ from channels.routing import URLRouter
 from channels.auth import AuthMiddlewareStack
 from redis_om import get_redis_connection
 
+from core.settings import BASE_DIR
 from trivia.urls import websocket_urlpatterns
 from trivia.models import Lobby, UserGame
 from trivia.utils import generate_lobby_token_and_data
 from trivia.types import GameStatus
 
-FIXTURES_PATH = Path(__file__).resolve().parent / "fixtures"
+FIXTURES_PATH = BASE_DIR / "fixtures"
 
 application = AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
 
