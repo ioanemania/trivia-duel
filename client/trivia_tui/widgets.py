@@ -17,6 +17,7 @@ class Question(Static):
         difficulty: str,
         category: str,
         type: str,
+        max_time: int = 30,
         *args,
         **kwargs,
     ):
@@ -27,20 +28,30 @@ class Question(Static):
         self.category = category
         self.type = type
         self.question_answered = False
+        self.max_time = max_time
 
         super().__init__(*args, **kwargs)
 
     def compose(self) -> ComposeResult:
-        yield Countdown(30)
+        if self.max_time:
+            yield Countdown(self.max_time)
         yield Static(self.question)
         for answer in self.incorrect_answers:
             yield Button(answer)
         yield Button(self.correct_answer)
 
     async def on_button_pressed(self, event: Button.Pressed):
+        event.prevent_default()
         self.disable_answers()
         correctly = str(event.button.label) == self.correct_answer
         self.question_answered = True
+
+        if correctly:
+            event.button.variant = "success"
+        else:
+            event.button.variant = "error"
+            self.highlight_correct_answer()
+
         await self.emit(QuestionAnswered(self, correctly, self.difficulty))
 
     async def on_countdown_finished(self):
@@ -51,6 +62,12 @@ class Question(Static):
     def disable_answers(self) -> None:
         for button in self.query(Button):
             button.disabled = True
+
+    def highlight_correct_answer(self):
+        for button in self.query(Button):
+            if str(button.label) == self.correct_answer:
+                button.variant = "success"
+                break
 
 
 class Countdown(Static):

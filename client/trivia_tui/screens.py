@@ -1,4 +1,5 @@
 from typing import Optional
+from collections import deque
 
 import json
 
@@ -69,7 +70,7 @@ class PlayMenuScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Button("Ranked", id="btn-ranked")
         yield Button("Normal", id="btn-normal")
-        yield Button("Training", id="btn-training", disabled=True)
+        yield Button("Training", id="btn-training")
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-ranked":
@@ -77,7 +78,52 @@ class PlayMenuScreen(Screen):
         elif event.button.id == "btn-normal":
             await self.app.push_screen(JoinOrHostScreen("normal"))
         else:
-            pass  # training
+            await self.app.push_screen(TrainingScreen())
+
+
+class TrainingScreen(Screen):
+    def __init__(self):
+        self.questions: Optional[deque[dict]] = None
+        super().__init__()
+
+    def on_mount(self):
+        self.questions = deque(decode_questions(self.app.client.get_training_questions()))
+
+        self.mount(Question(**self.questions[0], max_time=0))
+        self.mount(Button("Skip", id="btn-action"))
+
+    async def on_question_answered(self, _event: QuestionAnswered):
+        if len(self.questions) > 1:
+            self.query_one("#btn-action").label = "Next"
+            return
+
+        self.app.client.post_training_result()
+        await self.query_one("#btn-action").remove()
+
+    async def on_button_pressed(self, event: Button.Pressed):
+        match str(event.button.label):
+            case "Skip":
+                self.questions.append(self.questions.popleft())
+            case "Next":
+                self.questions.popleft()
+            case _:
+                raise Exception("Unexpected button press event received")
+
+        await self.mount_next_question()
+
+    async def clear_widgets(self) -> None:
+        for child in self.walk_children():
+            await child.remove()
+
+        self.set_focus(None)
+
+    async def mount_next_question(self) -> None:
+        await self.clear_widgets()
+        try:
+            await self.mount(Question(**self.questions[0], max_time=0))
+        except IndexError:
+            pass
+        await self.mount(Button("Skip", id="btn-action"))
 
 
 class JoinOrHostScreen(Screen):
