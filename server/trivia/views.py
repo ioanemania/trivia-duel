@@ -1,3 +1,4 @@
+from rest_framework.generics import ListAPIView
 from rest_framework.views import APIView
 from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
@@ -6,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from redis_om.model.model import NotFoundError
 
-from .serializers import LobbySerializer
+from .serializers import LobbySerializer, UserGameSerializer
 from .models import Lobby, Game, UserGame
 from .types import GameType, GameStatus
 from .utils import generate_lobby_token_and_data, parse_boolean_string, TriviaAPIClient
@@ -87,3 +88,11 @@ class TrainingView(APIView):
         user_game.save()
 
         return Response(status=status.HTTP_201_CREATED)
+
+
+class HistoryView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserGameSerializer
+
+    def get_queryset(self):
+        return self.request.user.user_games.select_related("opponent", "game").order_by("-game__timestamp").all()

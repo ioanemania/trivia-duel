@@ -1,4 +1,5 @@
 import json
+from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,8 +10,9 @@ from rest_framework import status
 from redis_om import get_redis_connection
 
 from core.settings import BASE_DIR
-from trivia.models import Lobby, UserGame
-from trivia.types import GameType
+from trivia.models import Lobby, Game
+from trivia.types import GameType, GameStatus
+from trivia.serializers import UserGameSerializer
 
 FIXTURES_PATH = BASE_DIR / "fixtures"
 
@@ -21,16 +23,11 @@ Lobby.Meta.database = test_db
 
 
 class LobbyViewSetTestCase(APITestCase):
+    fixtures = ["users.json"]
+
     @classmethod
     def setUpTestData(cls):
-        cls.user1 = User.objects.create_user(username="user1", password="user1")
-        cls.user2 = User.objects.create_user(username="user2", password="user2")
-        cls.user3 = User.objects.create_user(username="user3", password="user3")
-
-        cls.user1.save()
-        cls.user2.save()
-        cls.user3.save()
-
+        cls.user1, cls.user2, cls.user3 = User.objects.all()[:3]
         cls.lobby_name = "TEST_LOBBY"
 
     def setUp(self):
@@ -152,9 +149,11 @@ class LobbyViewSetTestCase(APITestCase):
 
 
 class TrainingViewTestCase(APITestCase):
+    fixtures = ["users.json"]
+
     @classmethod
     def setUpTestData(cls):
-        cls.user1 = User.objects.create_user(username="user1", password="user1")
+        cls.user1, cls.user2 = User.objects.all()[:2]
 
         with open(FIXTURES_PATH / "questions.json") as file:
             cls.questions = json.load(file)
@@ -182,3 +181,24 @@ class TrainingViewTestCase(APITestCase):
         games = self.user1.games.all()
         self.assertEqual(len(games), 1)
         self.assertEqual(games[0].type, GameType.TRAINING)
+
+    def test_get_history(self):
+        url = reverse("history")
+
+        game, user1_game, user2_game = Game.objects.save_multiplayer_game(
+            game_type=GameType.RANKED,
+            user1=self.user1,
+            user2=self.user2,
+            user1_status=GameStatus.WIN,
+            user2_status=GameStatus.LOSS,
+        )
+
+        training_game, user1_training_game = Game.objects.save_training_game(user=self.user1)
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]["game"]["type"], GameType.TRAINING.name.lower())
+        self.assertEqual(response.data[1]["game"]["type"], GameType.RANKED.name.lower())

@@ -142,7 +142,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         user_status_dict: dict[UserId, UserStatus] = {}
         user_objects = User.objects.filter(pk__in=(users.keys()))
-        for user in user_objects:
+        for user, opponent in zip(user_objects, reversed(user_objects)):
             status = users[user.pk]
             rank_gain = self.determine_rank_gain_by_game_status(status)
             if lobby.ranked:
@@ -151,6 +151,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
             UserGame(
                 user=user,
+                opponent=opponent,
                 game=game,
                 status=status,
                 rank=user.rank,
