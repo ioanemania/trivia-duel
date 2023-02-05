@@ -1,9 +1,9 @@
 import random
 
-from typing import Optional
+from typing import Optional, TypedDict, Iterable, Generator
 
 from textual.app import ComposeResult, RenderableType
-from textual.widgets import Static, Button
+from textual.widgets import Static, Button, DataTable
 from textual.reactive import reactive
 from textual.timer import Timer
 
@@ -112,3 +112,29 @@ class GameStatus(Static):
 
     def compose(self) -> ComposeResult:
         yield Static(self.status)
+
+
+class GameHistoryTable(DataTable):
+    def __init__(self, data: list[dict]):
+        self.game_data = data
+        print("I WAS FIRST")
+        super().__init__()
+
+    def on_mount(self):
+        self.add_columns(*self.flattened_columns())
+        self.add_rows((self.flattened_row(row) for row in self.game_data))
+
+    def flattened_columns(self):
+        print("HELLO!!!", self.game_data)
+        for key in self.game_data[0].keys():
+            if key == "game":
+                yield from self.game_data[0][key].keys()
+            else:
+                yield key
+
+    def flattened_row(self, row):
+        for key, value in row.items():
+            if key == "game":
+                yield from (str(value) for value in row[key].values())
+            else:
+                yield str(value)

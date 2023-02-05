@@ -16,7 +16,7 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable
 
 from .utils import decode_questions
-from .widgets import Question, GameStatus
+from .widgets import Question, GameStatus, GameHistoryTable
 from .messages import QuestionAnswered, FiftyFiftyTriggered
 
 
@@ -57,13 +57,15 @@ class MainMenuScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Button("Play", id="btn-play")
         yield Button("Leaderboard", id="btn-leaderboard")
-        yield Button("History", disabled=True)
+        yield Button("History", id="btn-history")
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-play":
             await self.app.push_screen(PlayMenuScreen())
         elif event.button.id == "btn-leaderboard":
             await self.app.push_screen(UserRankingScreen())
+        elif event.button.id == "btn-history":
+            await self.app.push_screen(GameHistoryScreen())
 
 
 class PlayMenuScreen(Screen):
@@ -283,3 +285,19 @@ class UserRankingScreen(Screen):
         table.add_rows(rankings)
 
         table.focus()
+
+
+class GameHistoryScreen(Screen):
+    def compose(self) -> ComposeResult:
+        games = self.app.client.get_user_games()
+        yield GameHistoryTable(games)
+
+    # def _on_mount(self, event: events.Mount) -> None:
+    # table = self.query_one(DataTable)
+    # games = self.app.client.get_user_games()
+    # print(games)
+    #
+    # table.add_columns(*games[0].keys())
+    # table.add_rows(((str(value) for value in game.values()) for game in games))
+
+    # table.focus()

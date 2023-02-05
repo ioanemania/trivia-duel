@@ -33,7 +33,6 @@ class TriviaClient:
     def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> Response:
         if authenticated and not self.access_token:
             raise Exception("Trying to make an authenticated request without being authenticated")
-
         auth = TokenAuth(self.access_token) if authenticated else None
 
         response = requests.request(method=method, url=url, auth=auth, *args, **kwargs)
@@ -93,9 +92,12 @@ class TriviaClient:
     def post_training_result(self) -> None:
         url = self.api_base_url + "/api/trivia/train/"
 
-        print("POSTING TRAINING RESULTS...")
         self._make_request("POST", url=url)
-        print("TRAINING RESULTS POSTED...")
+
+    def get_user_games(self) -> list[dict]:
+        url = self.api_base_url + "/api/trivia/history"
+
+        return self._make_request("GET", url=url).json()
 
     def ws_join_lobby(self, lobby_name: str, token: str) -> Task[websockets.WebSocketClientProtocol]:
         url = self.ws_base_url + f"/ws/trivia/lobbies/{lobby_name}?{token}"
