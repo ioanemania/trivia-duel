@@ -1,11 +1,14 @@
 from asyncio import Task
 
+import jwt
 import websockets
 from requests import Response
 from typing import Optional
 
 import requests
 from requests.auth import AuthBase
+
+from trivia_tui.exceptions import RefreshTokenExpiredError
 
 
 class TokenAuth(AuthBase):
@@ -33,12 +36,34 @@ class TriviaClient:
     def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> Response:
         if authenticated and not self.access_token:
             raise Exception("Trying to make an authenticated request without being authenticated")
-        auth = TokenAuth(self.access_token) if authenticated else None
+
+        if authenticated:
+            self._check_expiration_and_refresh_access_token()
+            auth = TokenAuth(self.access_token)
+        else:
+            auth = None
 
         response = requests.request(method=method, url=url, auth=auth, *args, **kwargs)
         response.raise_for_status()
 
         return response
+
+    def _check_expiration_and_refresh_access_token(self):
+        """Check if the access token has expired and if so, re-obtain it using the refresh token"""
+        headers = jwt.get_unverified_header(self.access_token)
+        try:
+            jwt.decode(
+                self.access_token, algorithms=[headers["alg"]], options={"verify_signature": False, "verify_exp": True}
+            )
+        except jwt.exceptions.ExpiredSignatureError:
+            url = self.api_base_url + "/api/token/refresh/"
+            access_token_response = requests.post(url, json={"refresh": self.refresh_token})
+
+            if access_token_response.status_code == 401:
+                # TODO: Handle refresh token expiration
+                raise RefreshTokenExpiredError("Refresh token has expired")
+
+            self.access_token = access_token_response.json()["access"]
 
     def register(self, username: str, password: str) -> None:
         url = self.api_base_url + "/api/user/register/"
