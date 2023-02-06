@@ -245,6 +245,7 @@ class GameScreen(Screen):
                 raise Exception("Unexpected button event received")
 
     async def on_question_answered(self, event: QuestionAnswered):
+        self.query_one("#btn-5050", Button).disabled = True
         await self.ws.send(
             json.dumps(
                 {
