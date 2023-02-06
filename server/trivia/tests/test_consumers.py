@@ -105,7 +105,8 @@ class GameConsumerTestCase(TestCase):
 
         await comm2.receive_json_from()  # game.start
         await comm2.receive_json_from()  # question.data
-        comm2_game_end = await comm2.receive_json_from()
+        await comm2.receive_json_from()  # question.next
+        comm2_game_end = await comm2.receive_json_from()  # game.end
 
         self.assertEqual(comm2_game_end["status"], GameStatus.WIN.name.lower())
 
@@ -119,6 +120,14 @@ class GameConsumerTestCase(TestCase):
 
         comm2 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user2_token}")
         connected2, _ = await comm2.connect()
+
+        await comm1.receive_json_from()  # game.start
+        await comm1.receive_json_from()  # game.data
+        await comm1.receive_json_from()  # game.next
+
+        await comm2.receive_json_from()  # game.start
+        await comm2.receive_json_from()  # game.data
+        await comm2.receive_json_from()  # game.next
 
         for i in range(10):  # TODO: refactor hardcoded value
             await comm1.send_json_to(data)
@@ -145,6 +154,7 @@ class GameConsumerTestCase(TestCase):
 
         await comm2.receive_json_from()  # game.start
         await comm2.receive_json_from()  # question.data
+        await comm2.receive_json_from()  # question.next
         await comm2.receive_json_from()  # game.end
         await comm2.disconnect()
 
@@ -177,9 +187,11 @@ class GameConsumerTestCase(TestCase):
 
         await comm1.receive_json_from()  # game.start
         await comm1.receive_json_from()  # question.data
+        await comm1.receive_json_from()  # question.next
 
         await comm2.receive_json_from()  # game.start
         await comm2.receive_json_from()  # question.data
+        await comm2.receive_json_from()  # question.next
 
         lobby = Lobby.get(self.lobby_name)
         lobby.users[self.user1_token]["hp"] = 0
@@ -203,3 +215,53 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(self.user1.rank, user1_prev_rank - 20)  # TODO: Remove hardcoded value
         self.assertEqual(self.user2.rank, user2_prev_rank + 20)  # TODO: Remove hardcoded value
+
+    async def test_server_initial_event_sequence(self):
+        comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
+        connected1, _ = await comm1.connect()
+
+        comm2 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user2_token}")
+        connected2, _ = await comm2.connect()
+
+        event1 = await comm1.receive_json_from()  # game.start
+        event2 = await comm1.receive_json_from()  # question.data
+        event3 = await comm1.receive_json_from()  # question.next
+
+        await comm1.disconnect()
+        await comm2.disconnect()
+
+        self.assertEqual(event1["type"], "game.start")
+        self.assertEqual(event2["type"], "question.data")
+        self.assertEqual(event3["type"], "question.next")
+
+    async def test_game_timout_received(self):
+        comm1 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user1_token}")
+        connected1, _ = await comm1.connect()
+
+        comm2 = WebsocketCommunicator(application, f"/lobbies/{self.lobby_name}?{self.user2_token}")
+        connected2, _ = await comm2.connect()
+
+        await comm1.receive_json_from()  # game.start
+        await comm1.receive_json_from()  # question.data
+        await comm1.receive_json_from()  # question.next
+
+        await comm2.receive_json_from()  # game.start
+        await comm2.receive_json_from()  # question.data
+        await comm2.receive_json_from()  # question.next
+
+        await comm1.send_json_to({"type": "game.timeout"})
+
+        await comm1.send_json_to({"type": "question.answered", "correctly": False, "difficulty": "easy"})
+        await comm2.send_json_to({"type": "question.answered", "correctly": True, "difficulty": "easy"})
+
+        await comm1.receive_json_from()  # opponent.answered
+        await comm2.receive_json_from()  # opponent.answered
+
+        comm1_game_end = await comm1.receive_json_from()  # game.end
+        comm2_game_end = await comm2.receive_json_from()  # game.end
+
+        self.assertEqual(comm1_game_end["type"], "game.end")
+        self.assertEqual(comm1_game_end["status"], GameStatus.LOSS.name.lower())
+
+        self.assertEqual(comm2_game_end["type"], "game.end")
+        self.assertEqual(comm2_game_end["status"], GameStatus.WIN.name.lower())

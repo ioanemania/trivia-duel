@@ -51,8 +51,11 @@ class GameConsumer(JsonWebsocketConsumer):
             lobby.trivia_token = TriviaAPIClient.get_token()
             questions = TriviaAPIClient.get_questions(token=lobby.trivia_token)
             lobby.state = LobbyState.IN_PROGRESS
+            self.send_event_to_lobby(
+                "game.start", {"opponent": "DUMMY", "duration": settings.GAME_MAX_DURATION_SECONDS}
+            )  # TODO: pass opponent name
             self.send_event_to_lobby("question.data", {"questions": questions})
-            self.send_event_to_lobby("game.start")
+            self.send_event_to_lobby("question.next")
 
         lobby.save()
 
@@ -105,6 +108,10 @@ class GameConsumer(JsonWebsocketConsumer):
                 lobby.save()
                 return
 
+            if lobby.game_timed_out:
+                self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
+                return
+
             # otherwise, both users have answered the question
             if any(user for user in lobby.users.values() if user["hp"] <= 0):
                 self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
@@ -123,6 +130,11 @@ class GameConsumer(JsonWebsocketConsumer):
             lobby.save()
 
             self.send_event_to_lobby("question.next")
+
+        if content["type"] == "game.timeout":
+            lobby = Lobby.get(self.lobby_name)
+            lobby.game_timed_out = True
+            lobby.save()
 
     def send_event_to_lobby(self, msg_type: str, data: dict = None) -> None:
         if data is None:

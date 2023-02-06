@@ -18,6 +18,7 @@ class Lobby(JsonModel):
     state: LobbyState = LobbyState.WAITING
     ranked: int = Field(index=True, default=0)
     trivia_token: str = ""
+    game_timed_out: bool = False
 
 
 class Game(models.Model):
