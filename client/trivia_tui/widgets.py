@@ -1,3 +1,5 @@
+import itertools
+
 import random
 
 from typing import Optional, TypedDict, Iterable, Generator
@@ -38,9 +40,14 @@ class Question(Static):
         if self.max_time:
             yield Countdown(self.max_time)
         yield Static(self.question)
-        for answer in self.incorrect_answers:
-            yield Button(answer)
-        yield Button(self.correct_answer)
+
+        if self.type == "boolean":
+            yield Button("True")
+            yield Button("False")
+        else:
+            all_answers = tuple(itertools.chain(self.incorrect_answers, (self.correct_answer,)))
+            for answer in random.sample(all_answers, k=len(all_answers)):
+                yield Button(answer)
 
     async def on_button_pressed(self, event: Button.Pressed):
         event.prevent_default()
