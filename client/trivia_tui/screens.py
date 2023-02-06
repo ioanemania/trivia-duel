@@ -1,3 +1,4 @@
+from textual.containers import Container
 from typing import Optional
 from collections import deque
 
@@ -13,10 +14,10 @@ import websockets
 from textual import events
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Button, Input, Static, DataTable
+from textual.widgets import Button, Input, Static, DataTable, Header
 
 from .utils import decode_questions
-from .widgets import Question, GameStatus, GameHistoryTable
+from .widgets import Question, GameStatus, GameHistoryTable, GameHeader
 from .messages import QuestionAnswered, FiftyFiftyTriggered
 
 
@@ -45,6 +46,7 @@ class LoginOrRegisterScreen(Screen):
             self.app.client.register(username, password)
         elif event.button.id == "btn-login":
             self.app.client.login(username, password)
+            self.app.username = username
             await self.app.push_screen(MainMenuScreen())
 
     def query_credentials(self) -> tuple[str, str]:
@@ -127,6 +129,10 @@ class TrainingScreen(Screen):
             pass
         await self.mount(Button("Skip", id="btn-action"))
 
+    async def on_key(self, event: events.Key):
+        if event.key == "escape":
+            await self.clear_widgets()
+
 
 class JoinOrHostScreen(Screen):
     def __init__(self, game_type: str):
@@ -195,7 +201,7 @@ class GameScreen(Screen):
         self.token = token
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
 
-        self.questions: dict | None = None
+        self.questions: Optional[list[dict]] = None
         self.current_question: int = 0
         self.fifty_fifty_chance: bool = True
 
@@ -216,7 +222,13 @@ class GameScreen(Screen):
 
     async def handle_ws_event(self, event) -> None:
         if event["type"] == "game.start":
-            await self.next_question()
+            opponent_name = event["opponent"]
+            duration = event["duration"]
+
+            await self.clear_widgets()
+            await self.mount(GameHeader(self.app.username, opponent_name, duration))
+            await self.mount(Container(id="container-question"))
+
         elif event["type"] == "question.data":
             self.questions = decode_questions(event["questions"])
             self.current_question = 0
@@ -228,12 +240,15 @@ class GameScreen(Screen):
     async def next_question(self) -> None:
         self.current_question += 1
 
-        await self.clear_widgets()
+        question_container = self.query_one("#container-question", Container)
+        for child in question_container.walk_children():
+            await child.remove()
+        self.set_focus(None)
 
-        await self.mount(Question(**self.questions[self.current_question]))
+        await question_container.mount(Question(**self.questions[self.current_question]))
 
         if self.fifty_fifty_chance:
-            await self.mount(Button("50/50", id="btn-5050"))
+            await question_container.mount(Button("50/50", id="btn-5050"))
 
     async def on_button_pressed(self, event: Button.Pressed):
         match event.button.id:
@@ -245,13 +260,25 @@ class GameScreen(Screen):
                 raise Exception("Unexpected button event received")
 
     async def on_question_answered(self, event: QuestionAnswered):
-        self.query_one("#btn-5050", Button).disabled = True
+        if self.fifty_fifty_chance:
+            question_container = self.query_one("#container-question", Container)
+            question_container.query_one("#btn-5050", Button).disabled = True
+
         await self.ws.send(
             json.dumps(
                 {
                     "type": "question.answered",
                     "correctly": event.correctly,
                     "difficulty": event.difficulty,
+                }
+            )
+        )
+
+    async def on_game_timed_out(self):
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "game.timeout",
                 }
             )
         )
@@ -263,9 +290,10 @@ class GameScreen(Screen):
         await self.ws.close()
 
     async def on_key(self, event: events.Key):
-        if event.key == "escape" and len(self.app.screen_stack) > 2:
+        if event.key == "escape":
             if self.ws:
                 await self.ws.close()
+            await self.clear_widgets()
 
     async def clear_widgets(self) -> None:
         for child in self.walk_children():
@@ -293,12 +321,5 @@ class GameHistoryScreen(Screen):
         games = self.app.client.get_user_games()
         yield GameHistoryTable(games)
 
-    # def _on_mount(self, event: events.Mount) -> None:
-    # table = self.query_one(DataTable)
-    # games = self.app.client.get_user_games()
-    # print(games)
-    #
-    # table.add_columns(*games[0].keys())
-    # table.add_rows(((str(value) for value in game.values()) for game in games))
-
-    # table.focus()
+    def on_mount(self):
+        self.query_one(GameHistoryTable).focus()

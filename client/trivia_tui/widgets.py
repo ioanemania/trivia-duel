@@ -1,15 +1,17 @@
 import itertools
 
 import random
+from rich.table import Table
+from textual.widget import Widget
 
 from typing import Optional, TypedDict, Iterable, Generator
 
 from textual.app import ComposeResult, RenderableType
-from textual.widgets import Static, Button, DataTable
+from textual.widgets import Static, Button, DataTable, Header
 from textual.reactive import reactive
 from textual.timer import Timer
 
-from .messages import QuestionAnswered, CountdownFinished, FiftyFiftyTriggered
+from .messages import QuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut
 
 
 class Question(Static):
@@ -91,11 +93,11 @@ class Question(Static):
 class Countdown(Static):
     seconds = reactive(0)
 
-    def __init__(self, duration: int):
+    def __init__(self, duration: int, *args, **kwargs):
         self.duration = duration
         self.timer: Optional[Timer] = None
 
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
     def render(self) -> RenderableType:
         return f"{self.seconds}"
@@ -145,3 +147,70 @@ class GameHistoryTable(DataTable):
                 yield from (str(value) for value in row[key].values())
             else:
                 yield str(value)
+
+
+class GameHeader(Widget):
+    DEFAULT_CSS = """
+    GameHeader {
+        dock: top;
+        width: 100%;
+        background: $foreground 5%;
+        color: $text;
+        height: 1;
+    }
+
+    #countdown {
+        content-align: center middle;
+        width: 100%;
+    }
+
+    #section-player {
+        dock: left;
+        padding: 0 1;
+        width: 30%;
+        content-align: left middle;
+    }
+
+    #section-opponent {
+        dock: right;
+        padding: 0 1;
+        width: 30%;
+        content-align: right middle;
+    }
+    """
+
+    def __init__(self, player_name: str, opponent_name: str, duration: int, *children: Widget, **kwargs):
+        super().__init__(*children, **kwargs)
+        self.player_name = player_name
+        self.opponent_name = opponent_name
+        self.duration = duration
+
+    def compose(self) -> ComposeResult:
+        yield PlayerHeaderSection(player_name=self.player_name, id="section-player")
+        yield Countdown(self.duration, id="countdown")
+        yield PlayerHeaderSection(player_name=self.opponent_name, reverse=True, id="section-opponent")
+
+    def decrease_player_hp(self, value: int):
+        self.query_one("#section-player", PlayerHeaderSection).hp -= value
+
+    def decrease_opponent_hp(self, value):
+        self.query_one("#section-opponent", PlayerHeaderSection).hp -= value
+
+    async def on_countdown_finished(self):
+        await self.emit(GameTimedOut(self))
+
+
+class PlayerHeaderSection(Static):
+    def __init__(self, player_name: str, reverse: bool = False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.player_name = player_name
+        self.reverse = reverse
+
+    hp = reactive(100)
+
+    def render(self) -> RenderableType:
+        if self.reverse:
+            return f"{self.hp} {self.player_name}"
+
+        return f"{self.player_name} {self.hp}"

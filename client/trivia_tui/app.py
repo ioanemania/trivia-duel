@@ -1,3 +1,5 @@
+from typing import Optional
+
 from textual import events
 from textual.app import App
 
@@ -8,9 +10,22 @@ TRIVIA_SERVER_URL = "localhost:8000/"
 
 
 class TriviaApp(App):
+    DEFAULT_CSS = """
+     Screen {
+        height: 100%;
+        margin: 4 8;
+        padding: 1 2;
+        align: center middle;
+    }
+
+    Static {
+        content-align: center middle;
+    }
+    """
+
     def __init__(self, *args, **kwargs):
         self.client = TriviaClient(TRIVIA_SERVER_URL)
-        self.access_token: str | None = None
+        self.username: Optional[str] = None
 
         super().__init__(*args, **kwargs)
 

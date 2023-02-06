@@ -24,3 +24,7 @@ class QuestionAnswered(Message):
 
 class FiftyFiftyTriggered(Message):
     bubble = False
+
+
+class GameTimedOut(Message):
+    bubble = False
