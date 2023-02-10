@@ -1,15 +1,12 @@
-import datetime
 import itertools
 
 import random
-from textual.widget import Widget
-
-from typing import Optional, TypedDict, Literal
-
 from textual.app import ComposeResult, RenderableType
-from textual.widgets import Static, Button, DataTable
 from textual.reactive import reactive
 from textual.timer import Timer
+from textual.widget import Widget
+from textual.widgets import Static, Button, DataTable
+from typing import Optional
 
 from .messages import TrainingQuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut, QuestionAnswered
 from .types import QuestionData, TrainingQuestionData

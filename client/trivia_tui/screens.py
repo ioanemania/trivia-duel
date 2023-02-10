@@ -1,25 +1,21 @@
-from textual.containers import Container
-from typing import Optional
 from collections import deque
 
-import json
-
-from contextlib import suppress
-
 import asyncio
-from requests.auth import AuthBase
-
+import json
 import websockets
-
+from contextlib import suppress
 from textual import events
 from textual.app import ComposeResult
+from textual.containers import Container
+from textual.css.query import NoMatches
 from textual.screen import Screen
-from textual.widgets import Button, Input, Static, DataTable, Header
+from textual.widgets import Button, Input, Static, DataTable
+from typing import Optional
 
+from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered
 from .types import TrainingQuestionData
 from .utils import decode_training_questions
 from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, TrainingQuestion
-from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered
 
 
 class LoginOrRegisterScreen(Screen):
@@ -328,7 +324,12 @@ class UserRankingScreen(Screen):
 class GameHistoryScreen(Screen):
     def compose(self) -> ComposeResult:
         games = self.app.client.get_user_games()
-        yield GameHistoryTable(games)
+        if games:
+            yield GameHistoryTable(games)
+        yield Static("You have not played any games yet!")
 
     def on_mount(self):
-        self.query_one(GameHistoryTable).focus()
+        try:
+            self.query_one(GameHistoryTable).focus()
+        except NoMatches:
+            pass
