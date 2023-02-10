@@ -46,13 +46,14 @@ def parse_boolean_string(value: str) -> bool:
 
 
 def generate_lobby_token(user) -> str:
-    token = jwt.encode({
-        "id": user.id,
-        "username": user.username,
-        "exp": datetime.now(tz=timezone.utc) + timedelta(seconds=5)
-    }, settings.SECRET_KEY, algorithm="HS256")
+    token = jwt.encode(
+        {"id": user.id, "username": user.username, "exp": datetime.now(tz=timezone.utc) + timedelta(seconds=5)},
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
 
     return token
+
 
 def decode_lobby_token(token: str) -> dict:
     return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])

@@ -210,9 +210,7 @@ class GameScreen(Screen):
 
     async def handle_ws_event(self, event) -> None:
         if event["type"] == "game.prepare":
-            await self.ws.send(json.dumps({
-                "type": "game.ready"
-            }))
+            await self.ws.send(json.dumps({"type": "game.ready"}))
 
         elif event["type"] == "game.start":
             opponent_name = event["opponent"]
@@ -240,7 +238,9 @@ class GameScreen(Screen):
             self.query_one(GameHeader).decrease_player_hp(int(event["damage"]))
 
         elif event["type"] == "fifty.response":
-            await self.query_one(Question).post_message(FiftyFiftyTriggered(self, incorrect_answers=event["incorrect_answers"]))
+            await self.query_one(Question).post_message(
+                FiftyFiftyTriggered(self, incorrect_answers=event["incorrect_answers"])
+            )
 
         elif event["type"] == "game.end":
             await asyncio.sleep(1)
@@ -267,10 +267,11 @@ class GameScreen(Screen):
             case "btn-5050":
                 self.fifty_fifty_chance = False
                 await event.button.remove()
-                await self.ws.send(json.dumps({
-                    "type": "fifty.request",
-                    "answers": self.questions[self.current_question-1]['answers']
-                }))
+                await self.ws.send(
+                    json.dumps(
+                        {"type": "fifty.request", "answers": self.questions[self.current_question - 1]["answers"]}
+                    )
+                )
             case _:
                 raise Exception("Unexpected button event received")
 
@@ -279,14 +280,7 @@ class GameScreen(Screen):
             question_container = self.query_one("#container-question", Container)
             question_container.query_one("#btn-5050", Button).disabled = True
 
-        await self.ws.send(
-            json.dumps(
-                {
-                    "type": "question.answered",
-                    "answer": event.answer
-                }
-            )
-        )
+        await self.ws.send(json.dumps({"type": "question.answered", "answer": event.answer}))
 
     async def game_end(self, status: str) -> None:
         await self.clear_widgets()

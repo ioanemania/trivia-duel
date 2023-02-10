@@ -17,5 +17,3 @@ class TrainingQuestionData(TypedDict):
     question: str
     correct_answer: str
     incorrect_answers: list[str]
-
-

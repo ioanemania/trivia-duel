@@ -64,10 +64,7 @@ class GameConsumer(JsonWebsocketConsumer):
         if lobby.users.get(token_data["id"]):
             raise DenyConnection()
 
-        lobby.users[token_data["id"]] = {
-            "name": token_data["username"],
-            "hp": 100
-        }
+        lobby.users[token_data["id"]] = {"name": token_data["username"], "hp": 100}
 
         self.user_id = token_data["id"]
 
@@ -190,9 +187,11 @@ class GameConsumer(JsonWebsocketConsumer):
             if any(
                 user for user in lobby.users.values() if user["hp"] <= 0
             ) or datetime.now() > lobby.game_start_time + timedelta(seconds=settings.GAME_MAX_DURATION_SECONDS):
-                self.handle_game_end(self.determine_user_status_by_hp(
-                    list((user_id, data["hp"]) for user_id, data in lobby.users.items())
-                ))
+                self.handle_game_end(
+                    self.determine_user_status_by_hp(
+                        list((user_id, data["hp"]) for user_id, data in lobby.users.items())
+                    )
+                )
                 return
 
             # current set of questions has been exhausted, obtain new ones

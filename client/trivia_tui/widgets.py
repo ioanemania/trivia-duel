@@ -20,10 +20,10 @@ class Question(Static):
         super().__init__(*args, **kwargs)
 
     def compose(self) -> ComposeResult:
-        yield Countdown(int(self.question_data['duration']))
-        yield Static(self.question_data['question'])
+        yield Countdown(int(self.question_data["duration"]))
+        yield Static(self.question_data["question"])
 
-        for answer in self.question_data['answers']:
+        for answer in self.question_data["answers"]:
             yield Button(answer)
 
     async def on_countdown_finished(self):
@@ -70,7 +70,9 @@ class TrainingQuestion(Static):
             yield Button("True")
             yield Button("False")
         else:
-            all_answers = tuple(itertools.chain(self.question_data["incorrect_answers"], (self.question_data["correct_answer"],)))
+            all_answers = tuple(
+                itertools.chain(self.question_data["incorrect_answers"], (self.question_data["correct_answer"],))
+            )
             for answer in random.sample(all_answers, k=len(all_answers)):
                 yield Button(answer)
 

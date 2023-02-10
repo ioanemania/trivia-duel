@@ -64,7 +64,7 @@ class GameConsumerTestCase(TestCase):
             self.user2.id: {
                 "name": self.user2.username,
                 "hp": 100,
-            }
+            },
         }
         lobby.save()
 
@@ -159,7 +159,6 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(expected_lobby, lobby_after_call)
         mock_async_to_sync.assert_not_called()
-
 
     @patch("trivia.consumers.async_to_sync")
     def test_last_user_disconnect(self, mock_async_to_sync: MagicMock):
@@ -388,9 +387,7 @@ class GameConsumerTestCase(TestCase):
         expected_lobby = lobby
         expected_lobby.current_answer_count = 1
         correct_answer_difficulty = expected_lobby.correct_answers[0].difficulty
-        expected_lobby.users[self.user1.id]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[
-            correct_answer_difficulty
-        ]
+        expected_lobby.users[self.user1.id]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[correct_answer_difficulty]
 
         question_max_duration = settings.QUESTION_MAX_DURATION_SECONDS_MAP[correct_answer_difficulty]
         mock_datetime.now.return_value = expected_lobby.question_start_time + timedelta(
@@ -443,7 +440,9 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(expected_lobby, lobby_after_call)
         self.assertEqual(self.game_consumer.question_answered, True)
-        self.game_consumer.determine_user_status_by_hp.assert_called_once_with([(user_id, data["hp"]) for user_id, data in lobby.users.items()])
+        self.game_consumer.determine_user_status_by_hp.assert_called_once_with(
+            [(user_id, data["hp"]) for user_id, data in lobby.users.items()]
+        )
         self.game_consumer.handle_game_end.assert_called_once_with(self.game_consumer.determine_user_status_by_hp())
 
     @patch("trivia.consumers.datetime")
@@ -479,7 +478,9 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(expected_lobby, lobby_after_call)
         self.assertEqual(self.game_consumer.question_answered, True)
-        self.game_consumer.determine_user_status_by_hp.assert_called_once_with([(user_id, data["hp"]) for user_id, data in lobby.users.items()])
+        self.game_consumer.determine_user_status_by_hp.assert_called_once_with(
+            [(user_id, data["hp"]) for user_id, data in lobby.users.items()]
+        )
         self.game_consumer.handle_game_end.assert_called_once_with(self.game_consumer.determine_user_status_by_hp())
 
     @patch("trivia.consumers.datetime")
