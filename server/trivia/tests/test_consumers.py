@@ -16,7 +16,7 @@ from redis_om.model.model import NotFoundError
 from core.settings import BASE_DIR
 from trivia.urls import websocket_urlpatterns
 from trivia.models import Lobby, Game, UserGame
-from trivia.utils import generate_lobby_token_and_data
+from trivia.utils import generate_lobby_token
 from trivia.types import (
     GameStatus,
     LobbyState,
@@ -27,7 +27,6 @@ from trivia.types import (
     TriviaAPIQuestion,
     GameType,
     GameEndEvent,
-    PlayerData,
 )
 from trivia.consumers import GameConsumer
 
@@ -53,11 +52,20 @@ class GameConsumerTestCase(TestCase):
     def setUp(self):
         self.user1, self.user2 = User.objects.all()[:2]
 
-        self.user1_token, user1_data = generate_lobby_token_and_data(self.user1)
-        self.user2_token, user2_data = generate_lobby_token_and_data(self.user2)
+        self.user1_token = generate_lobby_token(self.user1)
+        self.user2_token = generate_lobby_token(self.user2)
 
         lobby = Lobby(name=self.lobby_name, ranked=1)
-        lobby.users = {self.user1_token: user1_data, self.user2_token: user2_data}
+        lobby.users = {
+            self.user1.id: {
+                "name": self.user1.username,
+                "hp": 100,
+            },
+            self.user2.id: {
+                "name": self.user2.username,
+                "hp": 100,
+            }
+        }
         lobby.save()
 
         self.get_questions_patcher = patch("trivia.consumers.TriviaAPIClient.get_questions")
@@ -88,15 +96,16 @@ class GameConsumerTestCase(TestCase):
             test_db.delete(key)
 
     def test_unauthenticated_user_connect(self):
-        self.game_consumer.scope["url_route"]["kwargs"]["lobby_name"] = self.lobby_name
-
         with self.assertRaises(DenyConnection):
             self.game_consumer.connect()
 
     @patch("trivia.consumers.async_to_sync")
     def test_authenticated_user_connect(self, mock_async_to_sync: MagicMock):
-        self.game_consumer.scope["url_route"]["kwargs"]["lobby_name"] = self.lobby_name
         self.game_consumer.scope["query_string"] = self.user1_token.encode()
+
+        lobby = Lobby.get(self.lobby_name)
+        lobby.users = {}
+        lobby.save()
 
         with self.assertRaises(AcceptConnection):
             self.game_consumer.connect()
@@ -111,11 +120,10 @@ class GameConsumerTestCase(TestCase):
 
     @patch("trivia.consumers.async_to_sync")
     def test_second_user_connect(self, mock_async_to_sync: MagicMock):
-        self.game_consumer.scope["url_route"]["kwargs"]["lobby_name"] = self.lobby_name
-        self.game_consumer.scope["query_string"] = self.user1_token.encode()
+        self.game_consumer.scope["query_string"] = self.user2_token.encode()
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 1
+        del lobby.users[self.user2.id]
         lobby.save()
 
         with self.assertRaises(AcceptConnection):
@@ -124,22 +132,41 @@ class GameConsumerTestCase(TestCase):
         mock_async_to_sync.assert_called_once_with(self.game_consumer.channel_layer.group_add)
         self.mock_send_event_to_lobby.assert_called_once_with("game.prepare")
 
-    @patch("trivia.consumers.async_to_sync")
-    def test_more_than_two_users_connect(self, mock_async_to_sync: MagicMock):
-        self.game_consumer.scope["url_route"]["kwargs"]["lobby_name"] = self.lobby_name
+    def test_more_than_two_users_connect(self):
+        user3 = User.objects.all()[2]
+        self.game_consumer.scope["query_string"] = generate_lobby_token(user3)
+
+        with self.assertRaises(DenyConnection):
+            self.game_consumer.connect()
+
+    def test_same_user_connect_second_time(self):
+        self.game_consumer.scope["query_string"] = self.user1_token.encode()
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
+        del lobby.users[self.user2.id]
         lobby.save()
 
         with self.assertRaises(DenyConnection):
             self.game_consumer.connect()
 
     @patch("trivia.consumers.async_to_sync")
+    def test_unauthenticated_user_disconnect(self, mock_async_to_sync: MagicMock):
+        expected_lobby = Lobby.get(self.lobby_name)
+
+        self.game_consumer.disconnect(1006)
+
+        lobby_after_call = Lobby.get(self.lobby_name)
+
+        self.assertEqual(expected_lobby, lobby_after_call)
+        mock_async_to_sync.assert_not_called()
+
+
+    @patch("trivia.consumers.async_to_sync")
     def test_last_user_disconnect(self, mock_async_to_sync: MagicMock):
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 1
+        del lobby.users[self.user2.id]
         lobby.save()
+        self.game_consumer.user_id = self.user1.id
 
         self.game_consumer.disconnect(1000)
 
@@ -149,28 +176,22 @@ class GameConsumerTestCase(TestCase):
 
     @patch("trivia.consumers.async_to_sync")
     def test_first_user_disconnect(self, mock_async_to_sync: MagicMock):
-        self.game_consumer.token = self.user1_token
-
-        lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
-        lobby.save()
+        self.game_consumer.user_id = self.user2.id
 
         self.game_consumer.disconnect(1000)
 
         mock_async_to_sync.assert_called_once_with(self.game_consumer.channel_layer.group_discard)
         lobby = Lobby.get(self.lobby_name)
-        self.assertIsNone(lobby.users.get(self.user1_token))
+        self.assertIsNone(lobby.users.get(self.user2.id))
 
     @patch("trivia.consumers.GameConsumer.handle_game_end")
     @patch("trivia.consumers.async_to_sync")
     def test_user_disconnect_when_game_in_progress(
         self, mock_async_to_sync: MagicMock, mock_handle_game_end: MagicMock
     ):
-        self.game_consumer.token = self.user1_token
         self.game_consumer.user_id = self.user1.id
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
         lobby.state = LobbyState.IN_PROGRESS
         lobby.save()
 
@@ -181,7 +202,7 @@ class GameConsumerTestCase(TestCase):
 
     def test_receive_game_ready_only_one_user_in_lobby(self):
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 1
+        del lobby.users[self.user2.id]
         lobby.save()
 
         expected_lobby = lobby
@@ -195,11 +216,7 @@ class GameConsumerTestCase(TestCase):
         self.mock_send_event_to_lobby.assert_not_called()
 
     def test_receive_game_ready_first_user(self):
-        lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
-        lobby.save()
-
-        expected_lobby = lobby
+        expected_lobby = Lobby.get(self.lobby_name)
         expected_lobby.ready_count = 1
 
         content: ClientEvent = {"type": "game.ready"}
@@ -216,7 +233,6 @@ class GameConsumerTestCase(TestCase):
         self.game_consumer.ready_sent = True
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
         lobby.ready_count = 1
         lobby.save()
 
@@ -236,7 +252,6 @@ class GameConsumerTestCase(TestCase):
         mock_datetime.now.return_value = datetime.now()
 
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count = 2
         lobby.ready_count = 1
         lobby.save()
 
@@ -323,7 +338,6 @@ class GameConsumerTestCase(TestCase):
         )
 
     def test_receive_question_answered_incorrect_answer(self):
-        self.game_consumer.token = self.user1_token
         self.game_consumer.user_id = self.user1.id
 
         lobby = Lobby.get(self.lobby_name)
@@ -334,7 +348,7 @@ class GameConsumerTestCase(TestCase):
 
         expected_lobby = lobby
         expected_lobby.current_answer_count = 1
-        expected_lobby.users[self.user1_token]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[
+        expected_lobby.users[self.user1.id]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[
             expected_lobby.correct_answers[0].difficulty
         ]
 
@@ -361,7 +375,6 @@ class GameConsumerTestCase(TestCase):
 
     @patch("trivia.consumers.datetime")
     def test_receive_question_answered_after_max_question_duration(self, mock_datetime):
-        self.game_consumer.token = self.user1_token
         self.game_consumer.user_id = self.user1.id
 
         lobby = Lobby.get(self.lobby_name)
@@ -375,7 +388,7 @@ class GameConsumerTestCase(TestCase):
         expected_lobby = lobby
         expected_lobby.current_answer_count = 1
         correct_answer_difficulty = expected_lobby.correct_answers[0].difficulty
-        expected_lobby.users[self.user1_token]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[
+        expected_lobby.users[self.user1.id]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[
             correct_answer_difficulty
         ]
 
@@ -406,7 +419,6 @@ class GameConsumerTestCase(TestCase):
         )
 
     def test_receive_question_answered_second_time_and_user_hp_zero(self):
-        self.game_consumer.token = self.user2_token
         self.game_consumer.user_id = self.user2.id
         self.game_consumer.determine_user_status_by_hp = MagicMock()
         self.game_consumer.handle_game_end = MagicMock()
@@ -416,7 +428,7 @@ class GameConsumerTestCase(TestCase):
         lobby.current_question_count = 0
         lobby.current_answer_count = 1
         lobby.question_start_time = datetime.now()
-        lobby.users[self.user1_token]["hp"] = 0
+        lobby.users[self.user1.id]["hp"] = 0
         lobby.save()
 
         expected_lobby = lobby
@@ -431,12 +443,11 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(expected_lobby, lobby_after_call)
         self.assertEqual(self.game_consumer.question_answered, True)
-        self.game_consumer.determine_user_status_by_hp.assert_called_once_with(list(lobby.users.values()))
+        self.game_consumer.determine_user_status_by_hp.assert_called_once_with([(user_id, data["hp"]) for user_id, data in lobby.users.items()])
         self.game_consumer.handle_game_end.assert_called_once_with(self.game_consumer.determine_user_status_by_hp())
 
     @patch("trivia.consumers.datetime")
     def test_receive_question_answered_second_time_and_game_duration_expired(self, mock_datetime):
-        self.game_consumer.token = self.user2_token
         self.game_consumer.user_id = self.user2.id
         self.game_consumer.determine_user_status_by_hp = MagicMock()
         self.game_consumer.handle_game_end = MagicMock()
@@ -468,12 +479,11 @@ class GameConsumerTestCase(TestCase):
 
         self.assertEqual(expected_lobby, lobby_after_call)
         self.assertEqual(self.game_consumer.question_answered, True)
-        self.game_consumer.determine_user_status_by_hp.assert_called_once_with(list(lobby.users.values()))
+        self.game_consumer.determine_user_status_by_hp.assert_called_once_with([(user_id, data["hp"]) for user_id, data in lobby.users.items()])
         self.game_consumer.handle_game_end.assert_called_once_with(self.game_consumer.determine_user_status_by_hp())
 
     @patch("trivia.consumers.datetime")
     def test_receive_question_answered_second_time_game_continues(self, mock_datetime):
-        self.game_consumer.token = self.user2_token
         self.game_consumer.user_id = self.user2.id
         self.game_consumer.determine_user_status_by_hp = MagicMock()
         self.game_consumer.handle_game_end = MagicMock()
@@ -526,7 +536,6 @@ class GameConsumerTestCase(TestCase):
 
     @patch("trivia.consumers.datetime")
     def test_receive_question_answered_second_time_questions_exhausted(self, mock_datetime):
-        self.game_consumer.token = self.user2_token
         self.game_consumer.user_id = self.user2.id
         self.game_consumer.determine_user_status_by_hp = MagicMock()
         self.game_consumer.handle_game_end = MagicMock()
@@ -581,7 +590,6 @@ class GameConsumerTestCase(TestCase):
         )
 
     def test_receive_fifty_request_already_used(self):
-        self.game_consumer.token = self.user1_token
         self.game_consumer.fifty_used = True
 
         content: FiftyRequestedEvent = {"type": "fifty.request", "answers": self.formatted_questions[0]["answers"]}
@@ -610,7 +618,6 @@ class GameConsumerTestCase(TestCase):
     @patch("trivia.consumers.random.sample")
     def test_receive_fifty_request_multiple_choice_question(self, mock_sample):
         self.game_consumer.user_id = self.user1.id
-        self.game_consumer.token = self.user1_token
         self.game_consumer.fifty_used = False
         self.formatted_questions[0]["answers"] = ["1", "2", "3", "4"]
         mock_sample.return_value = ["2", "4"]
@@ -630,7 +637,6 @@ class GameConsumerTestCase(TestCase):
 
     def test_receive_fifty_request_with_incorrect_amount_of_answers(self):
         self.game_consumer.user_id = self.user1.id
-        self.game_consumer.token = self.user1_token
         self.game_consumer.fifty_used = False
         self.formatted_questions[0]["answers"] = ["1", "2", "3", "4", "5"]
 
@@ -785,8 +791,9 @@ class GameConsumerTestCase(TestCase):
             {"type": event["type"], "duration": event["duration"], "opponent": event["users"][self.user1.id]}
         )
 
+    @patch("trivia.consumers.GameConsumer.close")
     @patch("trivia.consumers.GameConsumer.send_json")
-    def test_game_end(self, mock_send_json: MagicMock):
+    def test_game_end(self, mock_send_json: MagicMock, mock_close: MagicMock):
         event: GameEndEvent = {
             "type": "game.end",
             "users": {
@@ -805,6 +812,7 @@ class GameConsumerTestCase(TestCase):
                 "rank_gain": event["users"][self.user1.id]["rank_gain"],
             }
         )
+        mock_close.assert_called_once()
 
     @patch("trivia.consumers.GameConsumer.send_json")
     def test_question_data(self, mock_send_json: MagicMock):
@@ -880,12 +888,12 @@ class GameConsumerTestCase(TestCase):
         mock_send_json.assert_not_called()
 
     def test_determine_user_status_by_hp_equal(self):
-        users: list[PlayerData] = [
-            {"user_id": self.user1.id, "name": self.user1.username, "hp": 100},
-            {"user_id": self.user2.id, "name": self.user2.username, "hp": 100},
+        data = [
+            (self.user1.id, 100),
+            (self.user2.id, 100),
         ]
 
-        status_dict = self.game_consumer.determine_user_status_by_hp(users)
+        status_dict = self.game_consumer.determine_user_status_by_hp(data)
 
         self.assertEqual(
             status_dict,
@@ -896,12 +904,12 @@ class GameConsumerTestCase(TestCase):
         )
 
     def test_determine_user_status_by_hp_user1_more(self):
-        users: list[PlayerData] = [
-            {"user_id": self.user1.id, "name": self.user1.username, "hp": 100},
-            {"user_id": self.user2.id, "name": self.user2.username, "hp": 50},
+        data = [
+            (self.user1.id, 100),
+            (self.user2.id, 50),
         ]
 
-        status_dict = self.game_consumer.determine_user_status_by_hp(users)
+        status_dict = self.game_consumer.determine_user_status_by_hp(data)
 
         self.assertEqual(
             status_dict,
@@ -912,12 +920,12 @@ class GameConsumerTestCase(TestCase):
         )
 
     def test_determine_user_status_by_hp_user1_less(self):
-        users: list[PlayerData] = [
-            {"user_id": self.user1.id, "name": self.user1.username, "hp": 50},
-            {"user_id": self.user2.id, "name": self.user2.username, "hp": 100},
+        data = [
+            (self.user1.id, 50),
+            (self.user2.id, 100),
         ]
 
-        status_dict = self.game_consumer.determine_user_status_by_hp(users)
+        status_dict = self.game_consumer.determine_user_status_by_hp(data)
 
         self.assertEqual(
             status_dict,

@@ -1,20 +1,19 @@
-from typing import Dict
 from datetime import datetime
+from typing import Dict
 
-from django.db import models
 from django.contrib.auth import get_user_model
+from django.db import models
 from redis_om import JsonModel, Field, Migrator
 
-from trivia.types import Token, PlayerData, LobbyState, GameStatus, GameType, CorrectAnswer
+from trivia.types import PlayerData, LobbyState, GameStatus, GameType, CorrectAnswer, UserId
 
 User = get_user_model()
 
 
 class Lobby(JsonModel):
     name: str = Field(primary_key=True)
-    user_count: int = 0
     ready_count: int = 0
-    users: Dict[Token, PlayerData] = {}
+    users: Dict[UserId, PlayerData] = {}
     current_answer_count: int = 0
     current_question_count: int = 0
     state: LobbyState = LobbyState.WAITING

@@ -1,9 +1,9 @@
-import secrets
+from datetime import datetime, timezone, timedelta
 
+import jwt
 import requests
 from django.conf import settings
 
-from trivia.models import PlayerData
 from trivia.types import TriviaAPIQuestion
 
 
@@ -26,13 +26,6 @@ class TriviaAPIClient:
         return response.json()["token"]
 
 
-def generate_lobby_token_and_data(user) -> tuple[str, PlayerData]:
-    data = PlayerData(user_id=user.id, name=user.username, hp=100)
-    token = secrets.token_urlsafe(16)
-
-    return token, data
-
-
 def parse_boolean_string(value: str) -> bool:
     """
     Converts a string to a boolean object
@@ -50,3 +43,16 @@ def parse_boolean_string(value: str) -> bool:
     true_false_bool = (True, False)
 
     return true_false_bool[true_false_str.index(value.lower())]
+
+
+def generate_lobby_token(user) -> str:
+    token = jwt.encode({
+        "id": user.id,
+        "username": user.username,
+        "exp": datetime.now(tz=timezone.utc) + timedelta(seconds=5)
+    }, settings.SECRET_KEY, algorithm="HS256")
+
+    return token
+
+def decode_lobby_token(token: str) -> dict:
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])

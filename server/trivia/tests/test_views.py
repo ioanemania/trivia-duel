@@ -1,18 +1,16 @@
 import json
-from collections import OrderedDict
-from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from rest_framework.test import APITestCase
-from rest_framework import status
 from redis_om import get_redis_connection
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from core.settings import BASE_DIR
 from trivia.models import Lobby, Game
 from trivia.types import GameType, GameStatus
-from trivia.serializers import UserGameSerializer
 
 FIXTURES_PATH = BASE_DIR / "fixtures"
 
@@ -48,10 +46,11 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         lobby = Lobby.get(lobby_name)
-        token = response.data["token"]
+        expires_in = lobby.db().ttl(lobby.key())
 
+        self.assertEqual(expires_in, settings.LOBBY_EXPIRE_SECONDS)
         self.assertEqual(lobby.name, lobby_name)
-        self.assertIn(token, lobby.users.keys())
+        self.assertIsNotNone(response.data.get("token"))
 
     def test_join_lobby_unauthenticated(self):
         url = reverse("lobby-join", args=[self.lobby_name])
@@ -67,9 +66,7 @@ class LobbyViewSetTestCase(APITestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        token = response.data["token"]
-        lobby = Lobby.get(self.lobby_name)
-        self.assertIn(token, lobby.users.keys())
+        self.assertIsNotNone(response.data.get("token"))
 
     def test_join_lobby_non_existing(self):
         lobby_name = "NON_EXISTING_LOBBY"
@@ -85,6 +82,13 @@ class LobbyViewSetTestCase(APITestCase):
 
         self.client.force_authenticate(user=self.user1)
         self.client.post(url)
+
+        lobby = Lobby.get(self.lobby_name)
+        lobby.users = {
+            self.user1.id: {"name": self.user1.username, "hp": 100},
+        }
+        lobby.save()
+
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -108,6 +112,13 @@ class LobbyViewSetTestCase(APITestCase):
 
         self.client.force_authenticate(user=self.user2)
         self.client.post(url)
+
+        lobby = Lobby.get(self.lobby_name)
+        lobby.users = {
+            self.user1.id: {"name": self.user1.username, "hp": 100},
+            self.user2.id: {"name": self.user2.username, "hp": 100},
+        }
+        lobby.save()
 
         self.client.force_authenticate(user=self.user3)
         response = self.client.post(url)

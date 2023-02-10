@@ -10,12 +10,13 @@ from django.contrib.auth import get_user_model
 from channels.generic.websocket import JsonWebsocketConsumer
 from channels.exceptions import DenyConnection, AcceptConnection
 from redis_om.model.model import NotFoundError
+from jwt.exceptions import InvalidTokenError
 
 from .models import Lobby, Game, LobbyState, UserGame
 from .types import (
     GameEndEvent,
     UserId,
-    PlayerData,
+    HP,
     GameStatus,
     UserStatus,
     GameType,
@@ -25,7 +26,7 @@ from .types import (
     CorrectAnswer,
     FiftyRequestedEvent,
 )
-from .utils import TriviaAPIClient
+from .utils import TriviaAPIClient, decode_lobby_token
 
 User = get_user_model()
 
@@ -33,7 +34,6 @@ User = get_user_model()
 class GameConsumer(JsonWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         self.lobby_name: Optional[str] = None
-        self.token: Optional[str] = None
         self.user_id: Optional[int] = None
         self.fifty_used: bool = False
         self.ready_sent: bool = False
@@ -52,22 +52,30 @@ class GameConsumer(JsonWebsocketConsumer):
         except NotFoundError:
             raise DenyConnection()
 
-        if lobby.user_count > 1:
+        if len(lobby.users) > 1:
             raise DenyConnection()
 
-        self.token = self.get_token_from_query_string()
-        if not lobby.users.get(self.token):
+        token = self.get_token_from_query_string()
+        try:
+            token_data = decode_lobby_token(token)
+        except InvalidTokenError:
             raise DenyConnection()
 
-        lobby.user_count += 1
+        if lobby.users.get(token_data["id"]):
+            raise DenyConnection()
 
-        self.user_id = lobby.users.get(self.token)["user_id"]
+        lobby.users[token_data["id"]] = {
+            "name": token_data["username"],
+            "hp": 100
+        }
+
+        self.user_id = token_data["id"]
 
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
 
-        if lobby.user_count == 1:
+        if len(lobby.users) == 1:
             Lobby.db().persist(lobby.key())
-        elif lobby.user_count == 2:
+        elif len(lobby.users) == 2:
             self.send_event_to_lobby("game.prepare")
 
         lobby.save()
@@ -75,11 +83,13 @@ class GameConsumer(JsonWebsocketConsumer):
         raise AcceptConnection()
 
     def disconnect(self, code):
+        if not self.user_id:
+            return
+
         lobby = Lobby.get(self.lobby_name)
-        lobby.user_count -= 1
 
         # If both users have disconnected, the lobby is deleted.
-        if lobby.user_count == 0:
+        if len(lobby.users) == 1:
             Lobby.delete(lobby.name)
             async_to_sync(self.channel_layer.group_discard)(self.lobby_name, self.channel_name)
             return
@@ -88,7 +98,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         if lobby.state == LobbyState.IN_PROGRESS:
             # If one of the users disconnected, but the game was still in progress declare the in game user a winner
-            opponent_user_id = next(user["user_id"] for user in lobby.users.values() if user["user_id"] != self.user_id)
+            opponent_user_id = next(user_id for user_id in lobby.users.keys() if user_id != self.user_id)
             self.handle_game_end(
                 {
                     self.user_id: GameStatus.LOSS,
@@ -96,13 +106,13 @@ class GameConsumer(JsonWebsocketConsumer):
                 }
             )
 
-        del lobby.users[self.token]
+        del lobby.users[self.user_id]
         lobby.save()
 
     def receive_json(self, content: ClientEvent, **kwargs):
         if content["type"] == "game.ready":
             lobby = Lobby.get(self.lobby_name)
-            if lobby.user_count != 2 or lobby.ready_count >= 2 or self.ready_sent:
+            if len(lobby.users) != 2 or lobby.ready_count >= 2 or self.ready_sent:
                 return
 
             lobby.ready_count += 1
@@ -119,8 +129,8 @@ class GameConsumer(JsonWebsocketConsumer):
                 "game.start",
                 {
                     "users": {
-                        user["user_id"]: opponent["name"]
-                        for user, opponent in zip(lobby.users.values(), reversed(lobby.users.values()))
+                        user_id: lobby.users[opponent_id]["name"]
+                        for user_id, opponent_id in zip(lobby.users.keys(), reversed(lobby.users.keys()))
                     },
                     "duration": settings.GAME_MAX_DURATION_SECONDS,
                 },
@@ -154,7 +164,7 @@ class GameConsumer(JsonWebsocketConsumer):
             ):
                 correctly = False
                 damage = settings.QUESTION_DIFFICULTY_DAMAGE_MAP[correct_answer.difficulty]
-                lobby.users[self.token]["hp"] -= damage
+                lobby.users[self.user_id]["hp"] -= damage
             else:
                 damage = 0
                 correctly = True
@@ -180,7 +190,9 @@ class GameConsumer(JsonWebsocketConsumer):
             if any(
                 user for user in lobby.users.values() if user["hp"] <= 0
             ) or datetime.now() > lobby.game_start_time + timedelta(seconds=settings.GAME_MAX_DURATION_SECONDS):
-                self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
+                self.handle_game_end(self.determine_user_status_by_hp(
+                    list((user_id, data["hp"]) for user_id, data in lobby.users.items())
+                ))
                 return
 
             # current set of questions has been exhausted, obtain new ones
@@ -275,6 +287,8 @@ class GameConsumer(JsonWebsocketConsumer):
             {"type": event["type"], "status": user_status["status"].name.lower(), "rank_gain": user_status["rank_gain"]}
         )
 
+        self.close()
+
     def question_data(self, event: dict):
         self.send_json(event)
 
@@ -296,11 +310,11 @@ class GameConsumer(JsonWebsocketConsumer):
         if event["user_id"] == self.user_id:
             self.send_json(event)
 
-    def determine_user_status_by_hp(self, users: list[PlayerData]) -> dict[UserId, GameStatus]:  # noqa
+    def determine_user_status_by_hp(self, users: list[tuple[UserId, HP]]) -> dict[UserId, GameStatus]:  # noqa
         """Determine the win/loss/draw status of both users based on their hp"""
 
-        user1_id, user1_hp = users[0]["user_id"], users[0]["hp"]
-        user2_id, user2_hp = users[1]["user_id"], users[1]["hp"]
+        user1_id, user1_hp = users[0]
+        user2_id, user2_hp = users[1]
 
         if user1_hp == user2_hp:
             user1_status = user2_status = GameStatus.DRAW

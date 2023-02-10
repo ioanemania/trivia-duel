@@ -8,7 +8,6 @@ HP = int
 
 
 class PlayerData(TypedDict):
-    user_id: UserId
     name: str
     hp: HP
 
@@ -47,7 +46,7 @@ class TriviaAPIQuestion(TypedDict):
 
 class TriviaAPIQuestionsResponse(TypedDict):
     """
-    The expected format of the response recieved from
+    The expected format of the response received from
     the Trivia API when requesting questions
     """
 
