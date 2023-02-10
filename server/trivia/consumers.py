@@ -1,4 +1,8 @@
+from datetime import datetime, timedelta
+import random
+import html
 from typing import Optional
+from itertools import chain
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
@@ -8,7 +12,19 @@ from channels.exceptions import DenyConnection, AcceptConnection
 from redis_om.model.model import NotFoundError
 
 from .models import Lobby, Game, LobbyState, UserGame
-from .types import GameEndEvent, UserId, PlayerData, GameStatus, UserStatus, GameType
+from .types import (
+    GameEndEvent,
+    UserId,
+    PlayerData,
+    GameStatus,
+    UserStatus,
+    GameType,
+    TriviaAPIQuestion,
+    QuestionAnsweredEvent,
+    ClientEvent,
+    CorrectAnswer,
+    FiftyRequestedEvent,
+)
 from .utils import TriviaAPIClient
 
 User = get_user_model()
@@ -19,6 +35,9 @@ class GameConsumer(JsonWebsocketConsumer):
         self.lobby_name: Optional[str] = None
         self.token: Optional[str] = None
         self.user_id: Optional[int] = None
+        self.fifty_used: bool = False
+        self.ready_sent: bool = False
+        self.question_answered: bool = False
 
         super().__init__(*args, **kwargs)
 
@@ -26,7 +45,6 @@ class GameConsumer(JsonWebsocketConsumer):
         return self.scope["query_string"].decode()
 
     def connect(self):
-        # TODO: Error handling
         self.lobby_name = self.scope["url_route"]["kwargs"]["lobby_name"]
 
         try:
@@ -47,15 +65,10 @@ class GameConsumer(JsonWebsocketConsumer):
 
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
 
-        if lobby.user_count == 2:
-            lobby.trivia_token = TriviaAPIClient.get_token()
-            questions = TriviaAPIClient.get_questions(token=lobby.trivia_token)
-            lobby.state = LobbyState.IN_PROGRESS
-            self.send_event_to_lobby(
-                "game.start", {"opponent": "DUMMY", "duration": settings.GAME_MAX_DURATION_SECONDS}
-            )  # TODO: pass opponent name
-            self.send_event_to_lobby("question.data", {"questions": questions})
-            self.send_event_to_lobby("question.next")
+        if lobby.user_count == 1:
+            Lobby.db().persist(lobby.key())
+        elif lobby.user_count == 2:
+            self.send_event_to_lobby("game.prepare")
 
         lobby.save()
 
@@ -73,8 +86,8 @@ class GameConsumer(JsonWebsocketConsumer):
 
         async_to_sync(self.channel_layer.group_discard)(self.lobby_name, self.channel_name)
 
-        # If one of the users disconnected, but the game was still in progress declare the in game user a winner
         if lobby.state == LobbyState.IN_PROGRESS:
+            # If one of the users disconnected, but the game was still in progress declare the in game user a winner
             opponent_user_id = next(user["user_id"] for user in lobby.users.values() if user["user_id"] != self.user_id)
             self.handle_game_end(
                 {
@@ -86,20 +99,74 @@ class GameConsumer(JsonWebsocketConsumer):
         del lobby.users[self.token]
         lobby.save()
 
-    def receive_json(self, content: dict, **kwargs):
-        if content["type"] == "question.answered":
+    def receive_json(self, content: ClientEvent, **kwargs):
+        if content["type"] == "game.ready":
             lobby = Lobby.get(self.lobby_name)
-
-            # receiving question.answered event more than two times for a single question is unexpected, ignore it
-            if lobby.current_answer_count > 1:
+            if lobby.user_count != 2 or lobby.ready_count >= 2 or self.ready_sent:
                 return
 
-            if not content["correctly"]:
-                lobby.users[self.token]["hp"] -= settings.QUESTION_DIFFICULTY_DAMAGE_MAP[content["difficulty"]]
+            lobby.ready_count += 1
+            self.ready_sent = True
+
+            if lobby.ready_count == 1:
+                lobby.save()
+                return
+
+            lobby.trivia_token = TriviaAPIClient.get_token()
+            lobby.state = LobbyState.IN_PROGRESS
+            lobby.game_start_time = datetime.now()
+            self.send_event_to_lobby(
+                "game.start",
+                {
+                    "users": {
+                        user["user_id"]: opponent["name"]
+                        for user, opponent in zip(lobby.users.values(), reversed(lobby.users.values()))
+                    },
+                    "duration": settings.GAME_MAX_DURATION_SECONDS,
+                },
+            )
+            formatted_questions, correct_answers = self.get_and_format_questions(lobby.trivia_token)
+            lobby.correct_answers = correct_answers
+            self.send_event_to_lobby("question.data", {"questions": formatted_questions})
+            lobby.question_start_time = datetime.now()
+            self.send_event_to_lobby("question.next")
+
+            lobby.save()
+
+        elif content["type"] == "question.answered":
+            content: QuestionAnsweredEvent
+
+            lobby = Lobby.get(self.lobby_name)
+
+            if self.question_answered:
+                return
+
+            self.question_answered = True
+
+            correct_answer = lobby.correct_answers[lobby.current_question_count]
+
+            question_max_duration = timedelta(
+                seconds=settings.QUESTION_MAX_DURATION_SECONDS_MAP[correct_answer.difficulty]
+            )
+            if (
+                content["answer"] != correct_answer.answer
+                or datetime.now() > lobby.question_start_time + question_max_duration
+            ):
+                correctly = False
+                damage = settings.QUESTION_DIFFICULTY_DAMAGE_MAP[correct_answer.difficulty]
+                lobby.users[self.token]["hp"] -= damage
+            else:
+                damage = 0
+                correctly = True
 
             self.send_event_to_lobby(
-                "opponent.answered",
-                {"user_id": self.user_id, "correctly": content["correctly"]},
+                "user.answered",
+                {
+                    "user_id": self.user_id,
+                    "correctly": correctly,
+                    "correct_answer": correct_answer.answer,
+                    "damage": damage,
+                },
             )
 
             # question has been answered for the first time
@@ -108,35 +175,55 @@ class GameConsumer(JsonWebsocketConsumer):
                 lobby.save()
                 return
 
-            if lobby.game_timed_out:
-                self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
-                return
-
             # otherwise, both users have answered the question
-            if any(user for user in lobby.users.values() if user["hp"] <= 0):
+
+            if any(
+                user for user in lobby.users.values() if user["hp"] <= 0
+            ) or datetime.now() > lobby.game_start_time + timedelta(seconds=settings.GAME_MAX_DURATION_SECONDS):
                 self.handle_game_end(self.determine_user_status_by_hp(list(lobby.users.values())))
                 return
 
             # current set of questions has been exhausted, obtain new ones
-            if lobby.current_question_count == 8:  # TODO: refactor hardcoded value
+            if lobby.current_question_count == settings.TRIVIA_API_QUESTION_AMOUNT - 1:
                 lobby.current_question_count = 0
 
-                questions = TriviaAPIClient.get_questions(lobby.trivia_token)
-                self.send_event_to_lobby("question.data", {"questions": questions})
+                formatted_questions, correct_answer = self.get_and_format_questions(lobby.trivia_token)
+                lobby.correct_answers = correct_answer
+                self.send_event_to_lobby("question.data", {"questions": formatted_questions})
             else:
                 lobby.current_question_count += 1
 
             lobby.current_answer_count = 0
+            lobby.question_start_time = datetime.now()
             lobby.save()
 
             self.send_event_to_lobby("question.next")
 
-        if content["type"] == "game.timeout":
+        elif content["type"] == "fifty.request":
+            content: FiftyRequestedEvent
+
+            if self.fifty_used:
+                return
+
+            self.fifty_used = True
+
             lobby = Lobby.get(self.lobby_name)
-            lobby.game_timed_out = True
-            lobby.save()
+            correct_answer = lobby.correct_answers[lobby.current_question_count].answer
+            if correct_answer in ("True", "False") or len(content["answers"]) != 4:
+                return
+
+            incorrect_answers = tuple(answer for answer in content["answers"] if answer != correct_answer)
+            if len(incorrect_answers) != 3:
+                return
+
+            random_incorrect_answers = random.sample(incorrect_answers, k=2)
+            self.send_event_to_lobby(
+                "fifty.response", {"user_id": self.user_id, "incorrect_answers": random_incorrect_answers}
+            )
 
     def send_event_to_lobby(self, msg_type: str, data: dict = None) -> None:
+        """Wrapper function to broadcast messages to the lobby's channel group"""
+
         if data is None:
             data = {}
 
@@ -173,8 +260,13 @@ class GameConsumer(JsonWebsocketConsumer):
 
         self.send_event_to_lobby("game.end", {"users": user_status_dict})
 
-    def game_start(self, event: dict):
+    def game_prepare(self, event: dict):
         self.send_json(event)
+
+    def game_start(self, event: dict):
+        opponent = event["users"][self.user_id]
+
+        self.send_json({"type": event["type"], "duration": event["duration"], "opponent": opponent})
 
     def game_end(self, event: GameEndEvent):
         user_status = event["users"][self.user_id]
@@ -187,10 +279,21 @@ class GameConsumer(JsonWebsocketConsumer):
         self.send_json(event)
 
     def question_next(self, event: dict):
+        self.question_answered = False
         self.send_json(event)
 
-    def opponent_answered(self, event: dict):
-        if not event["user_id"] == self.user_id:
+    def user_answered(self, event: dict):
+        if event["user_id"] == self.user_id:
+            event["type"] = "question.result"
+        else:
+            event["type"] = "opponent.answered"
+            del event["correct_answer"]
+
+        del event["user_id"]
+        self.send_json(event)
+
+    def fifty_response(self, event: dict):
+        if event["user_id"] == self.user_id:
             self.send_json(event)
 
     def determine_user_status_by_hp(self, users: list[PlayerData]) -> dict[UserId, GameStatus]:  # noqa
@@ -212,12 +315,38 @@ class GameConsumer(JsonWebsocketConsumer):
         }
 
     def determine_rank_gain_by_game_status(self, status: GameStatus) -> int:  # noqa
-        match status:
-            case GameStatus.WIN:
-                return 20
-            case GameStatus.LOSS:
-                return -20
-            case GameStatus.DRAW:
-                return 0
-            case _:
-                raise Exception("Undefined Status")
+        return {GameStatus.WIN: settings.GAME_RANK_GAIN, GameStatus.LOSS: -settings.GAME_RANK_GAIN, GameStatus.DRAW: 0}[
+            status
+        ]
+
+    def get_and_format_questions(self, trivia_token: str) -> tuple[list[dict], list[CorrectAnswer]]:
+        correct_answers = []
+        formatted_questions = []
+
+        for question in TriviaAPIClient.get_questions(trivia_token):
+            formatted_question, correct_answer = self.format_trivia_question(question)
+            formatted_questions.append(formatted_question)
+            correct_answer_data = CorrectAnswer(
+                answer=correct_answer,
+                difficulty=formatted_question["difficulty"],
+            )
+            correct_answers.append(correct_answer_data)
+
+        return formatted_questions, correct_answers
+
+    def format_trivia_question(self, question: TriviaAPIQuestion) -> tuple[dict, str]:  # noqa
+        if question["type"] == "boolean":
+            answers = ["True", "False"]
+        else:
+            encoded_answers = chain(question["incorrect_answers"], (question["correct_answer"],))
+            decoded_answers = tuple(html.unescape(answer) for answer in encoded_answers)
+            answers = random.sample(decoded_answers, k=len(decoded_answers))
+
+        return {
+            "category": question["category"],
+            "question": html.unescape(question["question"]),
+            "answers": answers,
+            "difficulty": question["difficulty"],
+            "duration": settings.QUESTION_MAX_DURATION_SECONDS_MAP[question["difficulty"]],
+            "type": question["type"],
+        }, html.unescape(question["correct_answer"])

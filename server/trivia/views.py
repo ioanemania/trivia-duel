@@ -27,6 +27,8 @@ class LobbyViewSet(ViewSet):
         lobby.users[token] = data
         lobby.save()
 
+        lobby.db().expire(lobby.key(), 10)
+
         return Response(data={"token": token}, status=status.HTTP_201_CREATED)
 
     def list(self, request):

@@ -141,9 +141,11 @@ REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.a
 
 # TRIVIA API
 
-TRIVIA_API_URL = "https://opentdb.com/api.php?amount=10"
+TRIVIA_API_QUESTION_AMOUNT = 10
+TRIVIA_API_URL = f"https://opentdb.com/api.php?amount={TRIVIA_API_QUESTION_AMOUNT}"
 TRIVIA_API_TOKEN_URL = "https://opentdb.com/api_token.php?command=request"
 
 QUESTION_DIFFICULTY_DAMAGE_MAP = {"easy": 10, "medium": 20, "hard": 25}
-
+QUESTION_MAX_DURATION_SECONDS_MAP = {"easy": 30, "medium": 45, "hard": 60}
 GAME_MAX_DURATION_SECONDS = 5 * 60
+GAME_RANK_GAIN = 20

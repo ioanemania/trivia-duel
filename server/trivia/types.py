@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import TypedDict, Literal, NamedTuple
 
 from django.db.models import IntegerChoices
 
@@ -9,6 +9,7 @@ HP = int
 
 class PlayerData(TypedDict):
     user_id: UserId
+    name: str
     hp: HP
 
 
@@ -35,9 +36,53 @@ class UserStatus(TypedDict):
     rank_gain: int
 
 
+class TriviaAPIQuestion(TypedDict):
+    category: str
+    type: Literal["boolean"] | Literal["multiple"]
+    difficulty: Literal["easy"] | Literal["medium"] | Literal["hard"]
+    question: str
+    correct_answer: str
+    incorrect_answers: list[str]
+
+
+class TriviaAPIQuestionsResponse(TypedDict):
+    """
+    The expected format of the response recieved from
+    the Trivia API when requesting questions
+    """
+
+    response_code: int
+    results: list[TriviaAPIQuestion]
+
+
+class CorrectAnswer(NamedTuple):
+    answer: str
+    difficulty: Literal["easy"] | Literal["medium"] | Literal["hard"]
+
+
 class BaseEvent(TypedDict):
     type: str
 
 
-class GameEndEvent(BaseEvent):
+class ServerEvent(BaseEvent):
+    """Event that is sent by the server"""
+
+    pass
+
+
+class ClientEvent(BaseEvent):
+    """Event that is sent by the client"""
+
+    pass
+
+
+class GameEndEvent(ServerEvent):
     users: dict[UserId, UserStatus]
+
+
+class QuestionAnsweredEvent(ClientEvent):
+    answer: str
+
+
+class FiftyRequestedEvent(ClientEvent):
+    answers: list[str]

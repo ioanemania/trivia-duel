@@ -1,15 +1,15 @@
 import secrets
-from typing import Optional
 
 import requests
 from django.conf import settings
 
 from trivia.models import PlayerData
+from trivia.types import TriviaAPIQuestion
 
 
 class TriviaAPIClient:
     @staticmethod
-    def get_questions(token: str = None) -> list[dict]:
+    def get_questions(token: str = None) -> list[TriviaAPIQuestion]:
         # TODO: Refactor URL construction
         url = settings.TRIVIA_API_URL + (f"&token={token}" if token else "")
 
@@ -27,7 +27,7 @@ class TriviaAPIClient:
 
 
 def generate_lobby_token_and_data(user) -> tuple[str, PlayerData]:
-    data = PlayerData(user_id=user.id, hp=100)
+    data = PlayerData(user_id=user.id, name=user.username, hp=100)
     token = secrets.token_urlsafe(16)
 
     return token, data

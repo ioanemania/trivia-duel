@@ -1,10 +1,11 @@
 from typing import Dict
+from datetime import datetime
 
 from django.db import models
 from django.contrib.auth import get_user_model
 from redis_om import JsonModel, Field, Migrator
 
-from trivia.types import Token, PlayerData, LobbyState, GameStatus, GameType
+from trivia.types import Token, PlayerData, LobbyState, GameStatus, GameType, CorrectAnswer
 
 User = get_user_model()
 
@@ -12,13 +13,16 @@ User = get_user_model()
 class Lobby(JsonModel):
     name: str = Field(primary_key=True)
     user_count: int = 0
+    ready_count: int = 0
     users: Dict[Token, PlayerData] = {}
     current_answer_count: int = 0
     current_question_count: int = 0
     state: LobbyState = LobbyState.WAITING
     ranked: int = Field(index=True, default=0)
     trivia_token: str = ""
-    game_timed_out: bool = False
+    correct_answers: list[CorrectAnswer] = []
+    game_start_time: datetime = 0
+    question_start_time: datetime = 0
 
 
 class Game(models.Model):
@@ -81,4 +85,4 @@ class UserGame(models.Model):
     extra_data = models.JSONField(null=True)
 
 
-Migrator().run()
+Migrator().run()  # TODO: Move this statement
