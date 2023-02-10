@@ -33,5 +33,8 @@ class TriviaApp(App):
         self.push_screen(LoginOrRegisterScreen())
 
     def on_key(self, event: events.Key):
-        if event.key == "escape" and len(self.screen_stack) > 3:
+        if event.key == "escape" and len(self.screen_stack) > 2:
+            screen = self.screen
+            self.install_screen(screen)
             self.pop_screen()
+            self.uninstall_screen(screen)

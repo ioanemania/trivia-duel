@@ -9,6 +9,7 @@ import requests
 from requests.auth import AuthBase
 
 from trivia_tui.exceptions import RefreshTokenExpiredError
+from trivia_tui.types import TrainingQuestionData
 
 
 class TokenAuth(AuthBase):
@@ -109,7 +110,7 @@ class TriviaClient:
 
         return self._make_request("GET", url=url).json()
 
-    def get_training_questions(self) -> list[dict]:
+    def get_training_questions(self) -> list[TrainingQuestionData]:
         url = self.api_base_url + "/api/trivia/train/"
 
         return self._make_request("GET", url=url).json()

@@ -16,6 +16,14 @@ class CountdownFinished(Message):
 class QuestionAnswered(Message):
     bubble = False
 
+    def __init__(self, sender: MessageTarget, answer: str):
+        self.answer = answer
+        super().__init__(sender)
+
+
+class TrainingQuestionAnswered(Message):
+    bubble = False
+
     def __init__(self, sender: MessageTarget, correctly: bool, difficulty: str) -> None:
         self.correctly = correctly
         self.difficulty = difficulty
@@ -24,6 +32,10 @@ class QuestionAnswered(Message):
 
 class FiftyFiftyTriggered(Message):
     bubble = False
+
+    def __init__(self, sender: MessageTarget, incorrect_answers: list[str]):
+        self.incorrect_answers = incorrect_answers
+        super().__init__(sender)
 
 
 class GameTimedOut(Message):

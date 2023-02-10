@@ -1,7 +1,9 @@
 import html
 
+from trivia_tui.types import TrainingQuestionData
 
-def decode_questions(questions: list[dict]) -> list[dict]:
+
+def decode_training_questions(questions: list[TrainingQuestionData]) -> list[TrainingQuestionData]:
     for question in questions:
         question["question"] = html.unescape(question["question"])
         question["correct_answer"] = html.unescape(question["correct_answer"])

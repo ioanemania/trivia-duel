@@ -16,19 +16,10 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable, Header
 
-from .utils import decode_questions
-from .widgets import Question, GameStatus, GameHistoryTable, GameHeader
-from .messages import QuestionAnswered, FiftyFiftyTriggered
-
-
-class TokenAuth(AuthBase):
-    def __init__(self, token: str, auth_scheme="Bearer"):
-        self.token = token
-        self.auth_scheme = auth_scheme
-
-    def __call__(self, request):
-        request.headers["Authorization"] = f"{self.auth_scheme} {self.token}"
-        return request
+from .types import TrainingQuestionData
+from .utils import decode_training_questions
+from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, TrainingQuestion
+from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered
 
 
 class LoginOrRegisterScreen(Screen):
@@ -87,16 +78,16 @@ class PlayMenuScreen(Screen):
 
 class TrainingScreen(Screen):
     def __init__(self):
-        self.questions: Optional[deque[dict]] = None
+        self.questions: Optional[deque[TrainingQuestionData]] = None
         super().__init__()
 
     def on_mount(self):
-        self.questions = deque(decode_questions(self.app.client.get_training_questions()))
+        self.questions = deque(decode_training_questions(self.app.client.get_training_questions()))
 
-        self.mount(Question(**self.questions[0], max_time=0))
+        self.mount(TrainingQuestion(self.questions[0]))
         self.mount(Button("Skip", id="btn-action"))
 
-    async def on_question_answered(self, _event: QuestionAnswered):
+    async def on_training_question_answered(self, _event: TrainingQuestionAnswered):
         if len(self.questions) > 1:
             self.query_one("#btn-action").label = "Next"
             return
@@ -124,7 +115,7 @@ class TrainingScreen(Screen):
     async def mount_next_question(self) -> None:
         await self.clear_widgets()
         try:
-            await self.mount(Question(**self.questions[0], max_time=0))
+            await self.mount(TrainingQuestion(self.questions[0]))
         except IndexError:
             pass
         await self.mount(Button("Skip", id="btn-action"))
@@ -203,6 +194,7 @@ class GameScreen(Screen):
 
         self.questions: Optional[list[dict]] = None
         self.current_question: int = 0
+        self.first_question_received: bool = False
         self.fifty_fifty_chance: bool = True
 
         super().__init__()
@@ -221,7 +213,12 @@ class GameScreen(Screen):
                 await self.handle_ws_event(json.loads(event))
 
     async def handle_ws_event(self, event) -> None:
-        if event["type"] == "game.start":
+        if event["type"] == "game.prepare":
+            await self.ws.send(json.dumps({
+                "type": "game.ready"
+            }))
+
+        elif event["type"] == "game.start":
             opponent_name = event["opponent"]
             duration = event["duration"]
 
@@ -230,32 +227,54 @@ class GameScreen(Screen):
             await self.mount(Container(id="container-question"))
 
         elif event["type"] == "question.data":
-            self.questions = decode_questions(event["questions"])
+            self.questions = event["questions"]
             self.current_question = 0
+
         elif event["type"] == "question.next":
+            if self.first_question_received:
+                await asyncio.sleep(1)
+            else:
+                self.first_question_received = True
+
             await self.next_question()
+
+        elif event["type"] == "question.result":
+            question_container = self.query_one("#container-question", Container)
+            question_container.query_one(Question).highlight_answers(event["correct_answer"], event["correctly"])
+            self.query_one(GameHeader).decrease_player_hp(int(event["damage"]))
+
+        elif event["type"] == "fifty.response":
+            await self.query_one(Question).post_message(FiftyFiftyTriggered(self, incorrect_answers=event["incorrect_answers"]))
+
         elif event["type"] == "game.end":
+            await asyncio.sleep(1)
             await self.game_end(event["status"])
 
-    async def next_question(self) -> None:
-        self.current_question += 1
+        elif event["type"] == "opponent.answered":
+            self.query_one(GameHeader).decrease_opponent_hp(int(event["damage"]))
 
+    async def next_question(self) -> None:
         question_container = self.query_one("#container-question", Container)
         for child in question_container.walk_children():
             await child.remove()
         self.set_focus(None)
 
-        await question_container.mount(Question(**self.questions[self.current_question]))
+        await question_container.mount(Question(self.questions[self.current_question]))
 
         if self.fifty_fifty_chance:
             await question_container.mount(Button("50/50", id="btn-5050"))
+
+        self.current_question += 1
 
     async def on_button_pressed(self, event: Button.Pressed):
         match event.button.id:
             case "btn-5050":
                 self.fifty_fifty_chance = False
                 await event.button.remove()
-                await self.query_one(Question).post_message(FiftyFiftyTriggered(self))
+                await self.ws.send(json.dumps({
+                    "type": "fifty.request",
+                    "answers": self.questions[self.current_question-1]['answers']
+                }))
             case _:
                 raise Exception("Unexpected button event received")
 
@@ -268,17 +287,7 @@ class GameScreen(Screen):
             json.dumps(
                 {
                     "type": "question.answered",
-                    "correctly": event.correctly,
-                    "difficulty": event.difficulty,
-                }
-            )
-        )
-
-    async def on_game_timed_out(self):
-        await self.ws.send(
-            json.dumps(
-                {
-                    "type": "game.timeout",
+                    "answer": event.answer
                 }
             )
         )
