@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable
 from typing import Optional
 
+from .exceptions import ResponseError
 from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered
 from .types import TrainingQuestionData
 from .utils import decode_training_questions
@@ -28,13 +29,20 @@ class LoginOrRegisterScreen(Screen):
     async def on_button_pressed(self, event: Button.Pressed):
         username, password = self.query_credentials()
 
-        # TODO: error handling
         if event.button.id == "btn-register":
-            self.app.client.register(username, password)
+            try:
+                self.app.client.register(username, password)
+                await self.app.push_screen(InfoScreen("Successfully registered!"))
+            except ResponseError as e:
+                await self.app.push_screen(ErrorScreen(e))
+
         elif event.button.id == "btn-login":
-            self.app.client.login(username, password)
-            self.app.username = username
-            await self.app.push_screen(MainMenuScreen())
+            try:
+                self.app.client.login(username, password)
+                self.app.username = username
+                await self.app.push_screen(MainMenuScreen())
+            except ResponseError as e:
+                await self.app.push_screen(ErrorScreen(e))
 
     def query_credentials(self) -> tuple[str, str]:
         username = self.query_one("#username").value
@@ -78,17 +86,26 @@ class TrainingScreen(Screen):
         super().__init__()
 
     def on_mount(self):
-        self.questions = deque(decode_training_questions(self.app.client.get_training_questions()))
-
-        self.mount(TrainingQuestion(self.questions[0]))
-        self.mount(Button("Skip", id="btn-action"))
+        try:
+            self.questions = deque(decode_training_questions(self.app.client.get_training_questions()))
+            self.mount(TrainingQuestion(self.questions[0]))
+            self.mount(Button("Skip", id="btn-action"))
+        except ResponseError as e:
+            self.app.switch_screen(ErrorScreen(e))
 
     async def on_training_question_answered(self, _event: TrainingQuestionAnswered):
         if len(self.questions) > 1:
             self.query_one("#btn-action").label = "Next"
             return
 
-        self.app.client.post_training_result()
+        try:
+            self.app.client.post_training_result()
+        except ResponseError as e:
+            self.app.install_screen(self)
+            self.app.switch_screen(ErrorScreen(e))
+            self.app.uninstall_screen(self)
+            return
+
         await self.query_one("#btn-action").remove()
 
     async def on_button_pressed(self, event: Button.Pressed):
@@ -150,8 +167,11 @@ class HostScreen(Screen):
         event.prevent_default()
         lobby_name = self.query_one("#lobby-name").value
 
-        # TODO: Error handling
-        data = self.app.client.create_lobby(lobby_name, ranked=self.game_type == "ranked")
+        try:
+            data = self.app.client.create_lobby(lobby_name, ranked=self.game_type == "ranked")
+        except ResponseError as e:
+            self.app.push_screen(ErrorScreen(e))
+            return
 
         self.app.install_screen(self)
         self.app.switch_screen(GameScreen(lobby_name, data["token"]))
@@ -167,7 +187,15 @@ class JoinScreen(Screen):
         super().__init__()
 
     def compose(self) -> ComposeResult:
-        lobbies = self.app.client.get_lobbies(ranked=self.game_type == "ranked")
+        try:
+            lobbies = self.app.client.get_lobbies(ranked=self.game_type == "ranked")
+        except ResponseError as e:
+            self.app.switch_screen(ErrorScreen(e))
+            return
+
+        if not lobbies:
+            yield Static("There are no lobbies")
+            return
 
         for lobby in lobbies:
             yield Button(lobby["name"])
@@ -175,7 +203,13 @@ class JoinScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed):
         lobby_name = event.button.label
 
-        data = self.app.client.join_lobby(lobby_name)
+        try:
+            data = self.app.client.join_lobby(lobby_name)
+        except ResponseError as e:
+            self.app.install_screen(self)
+            self.app.switch_screen(ErrorScreen(e))
+            self.app.uninstall_screen(self)
+            return
 
         self.app.install_screen(self)
         self.app.switch_screen(GameScreen(lobby_name, data["token"]))
@@ -306,10 +340,15 @@ class UserRankingScreen(Screen):
         yield DataTable()
 
     def on_mount(self):
+        try:
+            rankings = ((ranking["username"], str(ranking["rank"])) for ranking in self.app.client.get_rankings())
+        except ResponseError as e:
+            self.app.switch_screen(ErrorScreen(e))
+            return
+
         table = self.query_one(DataTable)
         table.add_columns("user", "rank")
 
-        rankings = ((ranking["username"], str(ranking["rank"])) for ranking in self.app.client.get_rankings())
         table.add_rows(rankings)
 
         table.focus()
@@ -317,9 +356,16 @@ class UserRankingScreen(Screen):
 
 class GameHistoryScreen(Screen):
     def compose(self) -> ComposeResult:
-        games = self.app.client.get_user_games()
+        try:
+            games = self.app.client.get_user_games()
+        except ResponseError as e:
+            self.app.switch_screen(ErrorScreen(e))
+            return
+
         if games:
             yield GameHistoryTable(games)
+            return
+
         yield Static("You have not played any games yet!")
 
     def on_mount(self):
@@ -327,3 +373,26 @@ class GameHistoryScreen(Screen):
             self.query_one(GameHistoryTable).focus()
         except NoMatches:
             pass
+
+
+class InfoScreen(Screen):
+    def __init__(self, msg: str, *args, **kwargs):
+        self.msg = msg
+        super().__init__(*args, **kwargs)
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.msg)
+
+
+class ErrorScreen(Screen):
+    def __init__(self, error: ResponseError, *args, **kwargs):
+        self.error = error
+        super().__init__(*args, **kwargs)
+
+    def compose(self) -> ComposeResult:
+        if self.error.error.get("detail"):
+            yield Static(self.error.error.get("detail"))
+            return
+
+        for field, errors in self.error.error.items():
+            yield from (Static(f"{field}: {error}") for error in errors)

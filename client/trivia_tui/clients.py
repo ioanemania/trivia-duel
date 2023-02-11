@@ -3,12 +3,12 @@ from asyncio import Task
 import jwt
 import websockets
 from requests import Response
-from typing import Optional
+from typing import Optional, Any
 
 import requests
 from requests.auth import AuthBase
 
-from trivia_tui.exceptions import RefreshTokenExpiredError
+from trivia_tui.exceptions import RefreshTokenExpiredError, ResponseError
 from trivia_tui.types import TrainingQuestionData
 
 
@@ -34,7 +34,7 @@ class TriviaClient:
         self.refresh_token: Optional[str] = None
 
     # TODO: Exception handling for failed requests
-    def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> Response:
+    def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> ResponseError | Response:
         if authenticated and not self.access_token:
             raise Exception("Trying to make an authenticated request without being authenticated")
 
@@ -44,8 +44,13 @@ class TriviaClient:
         else:
             auth = None
 
-        response = requests.request(method=method, url=url, auth=auth, *args, **kwargs)
-        response.raise_for_status()
+        try:
+            response = requests.request(method=method, url=url, auth=auth, *args, **kwargs)
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            raise ResponseError({"detail": "Unable to connect to the server"})
+        except requests.exceptions.HTTPError as e:
+            raise ResponseError(e.response.json())
 
         return response
 
