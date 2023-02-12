@@ -1,4 +1,5 @@
 from textual.message import Message, MessageTarget
+from textual.widgets import Button
 
 
 class GameStarted(Message):
@@ -39,4 +40,12 @@ class FiftyFiftyTriggered(Message):
 
 
 class GameTimedOut(Message):
+    bubble = False
+
+
+class BackButtonPressed(Message):
+    pass
+
+
+class GameLeaveRequested(Message):
     bubble = False

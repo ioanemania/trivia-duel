@@ -1,14 +1,18 @@
 import itertools
 
 import random
+from rich.text import TextType
+from textual import events
 from textual.app import ComposeResult, RenderableType
+from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Static, Button, DataTable
 from typing import Optional
 
-from .messages import TrainingQuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut, QuestionAnswered
+from .messages import TrainingQuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut, QuestionAnswered, \
+    BackButtonPressed
 from .types import QuestionData, TrainingQuestionData
 from .utils import convert_difficulty_to_stars
 
@@ -227,3 +231,28 @@ class PlayerHeaderSection(Static):
             return f"{self.hp} {self.player_name}"
 
         return f"{self.player_name} {self.hp}"
+
+
+class BackButton(Static):
+    def __init__(self, label: TextType, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.label = label
+
+    def compose(self) -> ComposeResult:
+        yield Button(self.label)
+
+    async def on_button_pressed(self, event: Button.Pressed):
+        event.prevent_default()
+        await self.emit(BackButtonPressed(self))
+
+
+class ConfirmLeaveModal(Static):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compose(self) -> ComposeResult:
+        yield Static("Are you sure you want to leave the game?")
+        yield Static("Game will count as a loss")
+        yield Button("Yes", id="confirm-accept")
+        yield Button("No", id="confirm-reject")

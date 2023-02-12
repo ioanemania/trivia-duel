@@ -6,17 +6,17 @@ import websockets
 from contextlib import suppress
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Container
+from textual.containers import Container, Horizontal
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable
 from typing import Optional
 
 from .exceptions import ResponseError
-from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered
+from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered, GameLeaveRequested
 from .types import TrainingQuestionData
 from .utils import decode_training_questions
-from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, TrainingQuestion
+from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, TrainingQuestion, BackButton, ConfirmLeaveModal
 
 
 class LoginOrRegisterScreen(Screen):
@@ -55,6 +55,7 @@ class MainMenuScreen(Screen):
         yield Button("Play", id="btn-play")
         yield Button("Leaderboard", id="btn-leaderboard")
         yield Button("History", id="btn-history")
+        yield BackButton("Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-play":
@@ -70,6 +71,7 @@ class PlayMenuScreen(Screen):
         yield Button("Ranked", id="btn-ranked")
         yield Button("Normal", id="btn-normal")
         yield Button("Training", id="btn-training")
+        yield BackButton("Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-ranked":
@@ -91,7 +93,7 @@ class TrainingScreen(Screen):
             await self.mount(TrainingQuestion(self.questions[0]))
             await self.mount(Button("Skip", id="btn-action"))
         except ResponseError as e:
-            await self.app.switch_screen(ErrorScreen(e))
+            await self.app.fixed_switch_screen(ErrorScreen(e))
 
     async def on_training_question_answered(self, _event: TrainingQuestionAnswered):
         if len(self.questions) > 1:
@@ -101,12 +103,11 @@ class TrainingScreen(Screen):
         try:
             self.app.client.post_training_result()
         except ResponseError as e:
-            await self.app.install_screen(self)
-            await self.app.switch_screen(ErrorScreen(e))
-            self.app.uninstall_screen(self)
+            await self.app.fixed_switch_screen(ErrorScreen(e))
             return
 
         await self.query_one("#btn-action").remove()
+        await self.mount(BackButton("Finish"))
 
     async def on_button_pressed(self, event: Button.Pressed):
         match str(event.button.label):
@@ -146,6 +147,7 @@ class JoinOrHostScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Button("Join", id="btn-join")
         yield Button("Host", id="btn-host")
+        yield BackButton("Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-host":
@@ -162,6 +164,7 @@ class HostScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Input(placeholder="Lobby Name", id="lobby-name")
         yield Button("Create")
+        yield BackButton("Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         event.prevent_default()
@@ -173,9 +176,7 @@ class HostScreen(Screen):
             await self.app.push_screen(ErrorScreen(e))
             return
 
-        await self.app.install_screen(self)
-        await self.app.switch_screen(GameScreen(lobby_name, data["token"]))
-        self.app.uninstall_screen(self)
+        await self.app.fixed_switch_screen(GameScreen(lobby_name, data["token"]))
 
     def on_screen_resume(self):
         self.query_one(Input).value = ""
@@ -195,10 +196,13 @@ class JoinScreen(Screen):
 
         if not lobbies:
             yield Static("There are no lobbies")
+            yield BackButton("Back")
             return
 
         for lobby in lobbies:
             yield Button(lobby["name"])
+
+        yield BackButton("Go Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         lobby_name = event.button.label
@@ -206,14 +210,10 @@ class JoinScreen(Screen):
         try:
             data = self.app.client.join_lobby(lobby_name)
         except ResponseError as e:
-            await self.app.install_screen(self)
-            await self.app.switch_screen(ErrorScreen(e))
-            self.app.uninstall_screen(self)
+            await self.app.fixed_switch_screen(ErrorScreen(e))
             return
 
-        await self.app.install_screen(self)
-        await self.app.switch_screen(GameScreen(lobby_name, data["token"]))
-        self.app.uninstall_screen(self)
+        await self.app.fixed_switch_screen(GameScreen(lobby_name, data["token"]))
 
 
 class GameScreen(Screen):
@@ -226,6 +226,7 @@ class GameScreen(Screen):
         self.current_question: int = 0
         self.first_question_received: bool = False
         self.fifty_fifty_chance: bool = True
+        self.game_in_progress: bool = False
 
         super().__init__()
 
@@ -244,6 +245,7 @@ class GameScreen(Screen):
 
     async def handle_ws_event(self, event) -> None:
         if event["type"] == "game.prepare":
+            self.game_in_progress = True
             await self.ws.send(json.dumps({"type": "game.ready"}))
 
         elif event["type"] == "game.start":
@@ -253,6 +255,10 @@ class GameScreen(Screen):
             await self.clear_widgets()
             await self.mount(GameHeader(self.app.username, opponent_name, duration))
             await self.mount(Container(id="container-question"))
+
+            confirm_leave = ConfirmLeaveModal(id="confirm-leave")
+            confirm_leave.display = "none"
+            await self.mount(confirm_leave)
 
         elif event["type"] == "question.data":
             self.questions = event["questions"]
@@ -277,6 +283,7 @@ class GameScreen(Screen):
             )
 
         elif event["type"] == "game.end":
+            self.game_in_progress = False
             await asyncio.sleep(1)
             await self.game_end(event["status"])
 
@@ -296,6 +303,20 @@ class GameScreen(Screen):
 
         self.current_question += 1
 
+    async def on_question_answered(self, event: QuestionAnswered):
+        if self.fifty_fifty_chance:
+            question_container = self.query_one("#container-question", Container)
+            question_container.query_one("#btn-5050", Button).disabled = True
+
+        await self.ws.send(json.dumps({"type": "question.answered", "answer": event.answer}))
+
+    async def game_end(self, status: str) -> None:
+        await self.ws.close()
+        await self.clear_widgets()
+
+        await self.mount(GameStatus(status))
+        await self.mount(BackButton("Leave"))
+
     async def on_button_pressed(self, event: Button.Pressed):
         match event.button.id:
             case "btn-5050":
@@ -306,27 +327,27 @@ class GameScreen(Screen):
                         {"type": "fifty.request", "answers": self.questions[self.current_question - 1]["answers"]}
                     )
                 )
+            case "confirm-accept":
+                if self.ws:
+                    await self.ws.close()
+                await self.clear_widgets()
+                await self.app.fixed_pop_screen()
+            case "confirm-reject":
+                self.query_one("#container-question").display = "block"
+                self.query_one("#confirm-leave").display = "none"
+                self.set_focus(None)
             case _:
                 raise Exception("Unexpected button event received")
 
-    async def on_question_answered(self, event: QuestionAnswered):
-        if self.fifty_fifty_chance:
-            question_container = self.query_one("#container-question", Container)
-            question_container.query_one("#btn-5050", Button).disabled = True
-
-        await self.ws.send(json.dumps({"type": "question.answered", "answer": event.answer}))
-
-    async def game_end(self, status: str) -> None:
-        await self.clear_widgets()
-
-        await self.mount(GameStatus(status))
-        await self.ws.close()
-
     async def on_key(self, event: events.Key):
-        if event.key == "escape":
-            if self.ws:
-                await self.ws.close()
-            await self.clear_widgets()
+        if event.key == "escape" and self.game_in_progress:
+            event.prevent_default()
+            question_container = self.query_one("#container-question")
+            confirm_leave = self.query_one("#confirm-leave")
+
+            question_container.display = "none" if question_container.display else "block"
+            confirm_leave.display = "none" if confirm_leave.display else "block"
+            self.set_focus(None)
 
     async def clear_widgets(self) -> None:
         for child in self.walk_children():
@@ -337,13 +358,14 @@ class GameScreen(Screen):
 
 class UserRankingScreen(Screen):
     def compose(self) -> ComposeResult:
+        yield BackButton("Back")
         yield DataTable()
 
     async def on_mount(self):
         try:
             rankings = ((ranking["username"], str(ranking["rank"])) for ranking in self.app.client.get_rankings())
         except ResponseError as e:
-            await self.app.switch_screen(ErrorScreen(e))
+            await self.app.fixed_switch_screen(ErrorScreen(e))
             return
 
         table = self.query_one(DataTable)
@@ -359,14 +381,16 @@ class GameHistoryScreen(Screen):
         try:
             games = self.app.client.get_user_games()
         except ResponseError as e:
-            self.app.switch_screen(ErrorScreen(e))
+            self.app.fixed_switch_screen(ErrorScreen(e))
             return
 
         if games:
+            yield BackButton("Back")
             yield GameHistoryTable(games)
             return
 
         yield Static("You have not played any games yet!")
+        yield BackButton("Back")
 
     async def on_mount(self):
         try:
@@ -382,7 +406,7 @@ class InfoScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Static(self.msg)
-
+        yield BackButton("Okay")
 
 class ErrorScreen(Screen):
     def __init__(self, error: ResponseError, *args, **kwargs):
@@ -392,7 +416,8 @@ class ErrorScreen(Screen):
     def compose(self) -> ComposeResult:
         if self.error.error.get("detail"):
             yield Static(self.error.error.get("detail"))
-            return
+        else:
+            for field, errors in self.error.error.items():
+                yield from (Static(f"{field}: {error}") for error in errors)
 
-        for field, errors in self.error.error.items():
-            yield from (Static(f"{field}: {error}") for error in errors)
+        yield BackButton("Okay")
