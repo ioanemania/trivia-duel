@@ -33,7 +33,6 @@ class TriviaClient:
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
 
-    # TODO: Exception handling for failed requests
     def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> ResponseError | Response:
         if authenticated and not self.access_token:
             raise Exception("Trying to make an authenticated request without being authenticated")
@@ -66,7 +65,6 @@ class TriviaClient:
             access_token_response = requests.post(url, json={"refresh": self.refresh_token})
 
             if access_token_response.status_code == 401:
-                # TODO: Handle refresh token expiration
                 raise RefreshTokenExpiredError("Refresh token has expired")
 
             self.access_token = access_token_response.json()["access"]

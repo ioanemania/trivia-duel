@@ -85,13 +85,13 @@ class TrainingScreen(Screen):
         self.questions: Optional[deque[TrainingQuestionData]] = None
         super().__init__()
 
-    def on_mount(self):
+    async def on_mount(self):
         try:
             self.questions = deque(decode_training_questions(self.app.client.get_training_questions()))
-            self.mount(TrainingQuestion(self.questions[0]))
-            self.mount(Button("Skip", id="btn-action"))
+            await self.mount(TrainingQuestion(self.questions[0]))
+            await self.mount(Button("Skip", id="btn-action"))
         except ResponseError as e:
-            self.app.switch_screen(ErrorScreen(e))
+            await self.app.switch_screen(ErrorScreen(e))
 
     async def on_training_question_answered(self, _event: TrainingQuestionAnswered):
         if len(self.questions) > 1:
@@ -101,8 +101,8 @@ class TrainingScreen(Screen):
         try:
             self.app.client.post_training_result()
         except ResponseError as e:
-            self.app.install_screen(self)
-            self.app.switch_screen(ErrorScreen(e))
+            await self.app.install_screen(self)
+            await self.app.switch_screen(ErrorScreen(e))
             self.app.uninstall_screen(self)
             return
 
@@ -147,11 +147,11 @@ class JoinOrHostScreen(Screen):
         yield Button("Join", id="btn-join")
         yield Button("Host", id="btn-host")
 
-    def on_button_pressed(self, event: Button.Pressed):
+    async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "btn-host":
-            self.app.push_screen(HostScreen(self.game_type))
+            await self.app.push_screen(HostScreen(self.game_type))
         elif event.button.id == "btn-join":
-            self.app.push_screen(JoinScreen(self.game_type))
+            await self.app.push_screen(JoinScreen(self.game_type))
 
 
 class HostScreen(Screen):
@@ -163,18 +163,18 @@ class HostScreen(Screen):
         yield Input(placeholder="Lobby Name", id="lobby-name")
         yield Button("Create")
 
-    def on_button_pressed(self, event: Button.Pressed):
+    async def on_button_pressed(self, event: Button.Pressed):
         event.prevent_default()
         lobby_name = self.query_one("#lobby-name").value
 
         try:
             data = self.app.client.create_lobby(lobby_name, ranked=self.game_type == "ranked")
         except ResponseError as e:
-            self.app.push_screen(ErrorScreen(e))
+            await self.app.push_screen(ErrorScreen(e))
             return
 
-        self.app.install_screen(self)
-        self.app.switch_screen(GameScreen(lobby_name, data["token"]))
+        await self.app.install_screen(self)
+        await self.app.switch_screen(GameScreen(lobby_name, data["token"]))
         self.app.uninstall_screen(self)
 
     def on_screen_resume(self):
@@ -200,19 +200,19 @@ class JoinScreen(Screen):
         for lobby in lobbies:
             yield Button(lobby["name"])
 
-    def on_button_pressed(self, event: Button.Pressed):
+    async def on_button_pressed(self, event: Button.Pressed):
         lobby_name = event.button.label
 
         try:
             data = self.app.client.join_lobby(lobby_name)
         except ResponseError as e:
-            self.app.install_screen(self)
-            self.app.switch_screen(ErrorScreen(e))
+            await self.app.install_screen(self)
+            await self.app.switch_screen(ErrorScreen(e))
             self.app.uninstall_screen(self)
             return
 
-        self.app.install_screen(self)
-        self.app.switch_screen(GameScreen(lobby_name, data["token"]))
+        await self.app.install_screen(self)
+        await self.app.switch_screen(GameScreen(lobby_name, data["token"]))
         self.app.uninstall_screen(self)
 
 
@@ -339,11 +339,11 @@ class UserRankingScreen(Screen):
     def compose(self) -> ComposeResult:
         yield DataTable()
 
-    def on_mount(self):
+    async def on_mount(self):
         try:
             rankings = ((ranking["username"], str(ranking["rank"])) for ranking in self.app.client.get_rankings())
         except ResponseError as e:
-            self.app.switch_screen(ErrorScreen(e))
+            await self.app.switch_screen(ErrorScreen(e))
             return
 
         table = self.query_one(DataTable)
@@ -368,7 +368,7 @@ class GameHistoryScreen(Screen):
 
         yield Static("You have not played any games yet!")
 
-    def on_mount(self):
+    async def on_mount(self):
         try:
             self.query_one(GameHistoryTable).focus()
         except NoMatches:
