@@ -10,6 +10,7 @@ from typing import Optional
 
 from .messages import TrainingQuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut, QuestionAnswered
 from .types import QuestionData, TrainingQuestionData
+from .utils import convert_difficulty_to_stars
 
 
 class Question(Static):
@@ -21,6 +22,7 @@ class Question(Static):
 
     def compose(self) -> ComposeResult:
         yield Countdown(int(self.question_data["duration"]))
+        yield Static(convert_difficulty_to_stars(self.question_data["difficulty"]))
         yield Static(self.question_data["question"])
 
         for answer in self.question_data["answers"]:
@@ -64,6 +66,7 @@ class TrainingQuestion(Static):
         super().__init__(*args, **kwargs)
 
     def compose(self) -> ComposeResult:
+        yield Static(convert_difficulty_to_stars(self.question_data["difficulty"]))
         yield Static(self.question_data["question"])
 
         if self.question_data["type"] == "boolean":
@@ -138,7 +141,7 @@ class GameHistoryTable(DataTable):
         self.game_data = data
         super().__init__()
 
-    def on_mount(self):
+    async def on_mount(self):
         self.add_columns(*self.flattened_columns())
         self.add_rows((self.flattened_row(row) for row in self.game_data))
 
@@ -149,7 +152,6 @@ class GameHistoryTable(DataTable):
             else:
                 yield key
 
-    # TODO: refactor flattening logic
     def flattened_row(self, row):  # noqa
         for key, value in row.items():
             if key == "game":
