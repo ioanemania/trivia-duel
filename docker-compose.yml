@@ -1,4 +1,9 @@
 services:
+  client:
+    build: client/
+    volumes:
+      - ./client/:/app
+
   app:
     build: server/
     ports:
