@@ -1,6 +1,6 @@
 import html
 
-from trivia_tui.types import TrainingQuestionData, Difficulty
+from trivia_tui.types import Difficulty, TrainingQuestionData
 
 
 def decode_training_questions(questions: list[TrainingQuestionData]) -> list[TrainingQuestionData]:

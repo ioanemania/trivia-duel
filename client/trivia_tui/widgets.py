@@ -1,23 +1,21 @@
 import itertools
-
 import random
+from typing import Optional
+
 from rich.text import TextType
-from textual import events
 from textual.app import ComposeResult, RenderableType
-from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import Static, Button, DataTable
-from typing import Optional
+from textual.widgets import Button, DataTable, Static
 
 from .messages import (
-    TrainingQuestionAnswered,
+    BackButtonPressed,
     CountdownFinished,
     FiftyFiftyTriggered,
     GameTimedOut,
     QuestionAnswered,
-    BackButtonPressed,
+    TrainingQuestionAnswered,
 )
 from .types import QuestionData, TrainingQuestionData
 from .utils import convert_difficulty_to_stars

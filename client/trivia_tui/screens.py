@@ -1,22 +1,30 @@
-from collections import deque
-
 import asyncio
 import json
-import websockets
+from collections import deque
 from contextlib import suppress
+from typing import Optional
+
+import websockets
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Container
 from textual.css.query import NoMatches
 from textual.screen import Screen
-from textual.widgets import Button, Input, Static, DataTable
-from typing import Optional
+from textual.widgets import Button, DataTable, Input, Static
 
 from .exceptions import ResponseError
-from .messages import TrainingQuestionAnswered, FiftyFiftyTriggered, QuestionAnswered, GameLeaveRequested
+from .messages import FiftyFiftyTriggered, QuestionAnswered, TrainingQuestionAnswered
 from .types import TrainingQuestionData
 from .utils import decode_training_questions
-from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, TrainingQuestion, BackButton, ConfirmLeaveModal
+from .widgets import (
+    BackButton,
+    ConfirmLeaveModal,
+    GameHeader,
+    GameHistoryTable,
+    GameStatus,
+    Question,
+    TrainingQuestion,
+)
 
 
 class LoginOrRegisterScreen(Screen):

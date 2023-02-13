@@ -1,9 +1,8 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 import requests
 from django.conf import settings
-
 from trivia.types import TriviaAPIQuestion
 
 

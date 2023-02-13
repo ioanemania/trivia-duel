@@ -1,5 +1,4 @@
 from textual.message import Message, MessageTarget
-from textual.widgets import Button
 
 
 class GameStarted(Message):

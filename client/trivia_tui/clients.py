@@ -1,13 +1,11 @@
 from asyncio import Task
+from typing import Optional
 
 import jwt
+import requests
 import websockets
 from requests import Response
-from typing import Optional, Any
-
-import requests
 from requests.auth import AuthBase
-
 from trivia_tui.exceptions import RefreshTokenExpiredError, ResponseError
 from trivia_tui.types import TrainingQuestionData
 
@@ -95,7 +93,7 @@ class TriviaClient:
         url_components = (self.api_base_url, "/api/trivia/lobbies/")
 
         if ranked is not None:
-            url_components += f"?ranked=", str(ranked)
+            url_components += "?ranked=", str(ranked)
         url = "".join(url_components)
 
         return self._make_request("GET", url=url).json()

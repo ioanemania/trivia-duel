@@ -1,13 +1,11 @@
-from textual.screen import Screen
-from textual.widget import AwaitMount
 from typing import Optional
 
 from textual import events
 from textual.app import App
+from textual.screen import Screen
 
-from .messages import BackButtonPressed
-from .screens import LoginOrRegisterScreen
 from .clients import TriviaClient
+from .screens import LoginOrRegisterScreen
 
 TRIVIA_SERVER_URL = "app:8000/"
 

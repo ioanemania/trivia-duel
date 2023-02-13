@@ -1,17 +1,15 @@
 import json
-
 from pathlib import Path
 from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from textual.css.query import NoMatches
 from textual.widgets import Button
-from unittest.mock import MagicMock, AsyncMock, patch
-
+from trivia_tui import screens
 from trivia_tui.app import BaseApp
 from trivia_tui.exceptions import ResponseError
-from trivia_tui import screens
 from trivia_tui.messages import TrainingQuestionAnswered
-from trivia_tui.widgets import TrainingQuestion, BackButton
+from trivia_tui.widgets import BackButton, TrainingQuestion
 
 FIXTURES_PATH = Path(__file__).resolve().parent / "fixtures"
 

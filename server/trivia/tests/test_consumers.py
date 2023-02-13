@@ -1,34 +1,32 @@
 import html
 import json
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock, ANY, call
+from unittest.mock import ANY, MagicMock, call, patch
 
-from channels.exceptions import DenyConnection, AcceptConnection
-from django.conf import settings
-from django.test import TestCase
-from django.contrib.auth import get_user_model
-
-from channels.routing import URLRouter
 from channels.auth import AuthMiddlewareStack
+from channels.exceptions import AcceptConnection, DenyConnection
+from channels.routing import URLRouter
+from core.settings import BASE_DIR
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.test import TestCase
 from redis_om import get_redis_connection
 from redis_om.model.model import NotFoundError
-
-from core.settings import BASE_DIR
-from trivia.urls import websocket_urlpatterns
-from trivia.models import Lobby, Game, UserGame
-from trivia.utils import generate_lobby_token
+from trivia.consumers import GameConsumer
+from trivia.models import Game, Lobby, UserGame
 from trivia.types import (
-    GameStatus,
-    LobbyState,
     ClientEvent,
-    QuestionAnsweredEvent,
     CorrectAnswer,
     FiftyRequestedEvent,
-    TriviaAPIQuestion,
-    GameType,
     GameEndEvent,
+    GameStatus,
+    GameType,
+    LobbyState,
+    QuestionAnsweredEvent,
+    TriviaAPIQuestion,
 )
-from trivia.consumers import GameConsumer
+from trivia.urls import websocket_urlpatterns
+from trivia.utils import generate_lobby_token
 
 FIXTURES_PATH = BASE_DIR / "fixtures"
 

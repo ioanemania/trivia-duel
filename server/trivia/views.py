@@ -8,10 +8,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ViewSet
 
-from .models import Lobby, Game, UserGame
+from .models import Game, Lobby, UserGame
 from .serializers import LobbySerializer, UserGameSerializer
-from .types import GameType, GameStatus
-from .utils import parse_boolean_string, TriviaAPIClient, generate_lobby_token
+from .types import GameStatus, GameType
+from .utils import TriviaAPIClient, generate_lobby_token, parse_boolean_string
 
 
 class LobbyViewSet(ViewSet):

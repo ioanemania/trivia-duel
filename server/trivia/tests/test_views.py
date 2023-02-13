@@ -1,16 +1,15 @@
 import json
 from unittest.mock import patch
 
+from core.settings import BASE_DIR
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from redis_om import get_redis_connection
 from rest_framework import status
 from rest_framework.test import APITestCase
-
-from core.settings import BASE_DIR
-from trivia.models import Lobby, Game
-from trivia.types import GameType, GameStatus
+from trivia.models import Game, Lobby
+from trivia.types import GameStatus, GameType
 
 FIXTURES_PATH = BASE_DIR / "fixtures"
 

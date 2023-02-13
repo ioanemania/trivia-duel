@@ -1,4 +1,4 @@
-from typing import TypedDict, Literal, NamedTuple
+from typing import Literal, NamedTuple, TypedDict
 
 from django.db.models import IntegerChoices
 

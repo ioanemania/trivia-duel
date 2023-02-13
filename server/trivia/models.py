@@ -3,9 +3,15 @@ from typing import Dict
 
 from django.contrib.auth import get_user_model
 from django.db import models
-from redis_om import JsonModel, Field, Migrator
-
-from trivia.types import PlayerData, LobbyState, GameStatus, GameType, CorrectAnswer, UserId
+from redis_om import Field, JsonModel, Migrator
+from trivia.types import (
+    CorrectAnswer,
+    GameStatus,
+    GameType,
+    LobbyState,
+    PlayerData,
+    UserId,
+)
 
 User = get_user_model()
 

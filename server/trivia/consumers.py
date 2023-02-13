@@ -1,30 +1,30 @@
-from datetime import datetime, timedelta
-import random
 import html
-from typing import Optional
+import random
+from datetime import datetime, timedelta
 from itertools import chain
+from typing import Optional
 
 from asgiref.sync import async_to_sync
+from channels.exceptions import AcceptConnection, DenyConnection
+from channels.generic.websocket import JsonWebsocketConsumer
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from channels.generic.websocket import JsonWebsocketConsumer
-from channels.exceptions import DenyConnection, AcceptConnection
-from redis_om.model.model import NotFoundError
 from jwt.exceptions import InvalidTokenError
+from redis_om.model.model import NotFoundError
 
-from .models import Lobby, Game, LobbyState, UserGame
+from .models import Game, Lobby, LobbyState, UserGame
 from .types import (
-    GameEndEvent,
-    UserId,
     HP,
-    GameStatus,
-    UserStatus,
-    GameType,
-    TriviaAPIQuestion,
-    QuestionAnsweredEvent,
     ClientEvent,
     CorrectAnswer,
     FiftyRequestedEvent,
+    GameEndEvent,
+    GameStatus,
+    GameType,
+    QuestionAnsweredEvent,
+    TriviaAPIQuestion,
+    UserId,
+    UserStatus,
 )
 from .utils import TriviaAPIClient, decode_lobby_token
 
@@ -107,130 +107,138 @@ class GameConsumer(JsonWebsocketConsumer):
         lobby.save()
 
     def receive_json(self, content: ClientEvent, **kwargs):
-        if content["type"] == "game.ready":
-            lobby = Lobby.get(self.lobby_name)
-            if len(lobby.users) != 2 or lobby.ready_count >= 2 or self.ready_sent:
+        """
+        Try to call a handler associated with the received event type.
+        """
+
+        match content["type"]:
+            case "game.ready":
+                self.receive_game_ready(content)
+            case "question.answered":
+                content: QuestionAnsweredEvent
+                self.receive_question_answered(content)
+            case "fifty.request":
+                content: FiftyRequestedEvent
+                self.receive_fifty_request(content)
+            case _:
                 return
 
-            lobby.ready_count += 1
-            self.ready_sent = True
+    def receive_game_ready(self, _content: dict):
+        lobby = Lobby.get(self.lobby_name)
+        if len(lobby.users) != 2 or lobby.ready_count >= 2 or self.ready_sent:
+            return
 
-            if lobby.ready_count == 1:
-                lobby.save()
-                return
+        lobby.ready_count += 1
+        self.ready_sent = True
 
-            lobby.trivia_token = TriviaAPIClient.get_token()
-            lobby.state = LobbyState.IN_PROGRESS
-            lobby.game_start_time = datetime.now()
-            self.send_event_to_lobby(
-                "game.start",
-                {
-                    "users": {
-                        str(user_id): lobby.users[opponent_id]["name"]
-                        for user_id, opponent_id in zip(lobby.users.keys(), reversed(lobby.users.keys()))
-                    },
-                    "duration": settings.GAME_MAX_DURATION_SECONDS,
+        if lobby.ready_count == 1:
+            lobby.save()
+            return
+
+        lobby.trivia_token = TriviaAPIClient.get_token()
+        lobby.state = LobbyState.IN_PROGRESS
+        lobby.game_start_time = datetime.now()
+        self.send_event_to_lobby(
+            "game.start",
+            {
+                "users": {
+                    str(user_id): lobby.users[opponent_id]["name"]
+                    for user_id, opponent_id in zip(lobby.users.keys(), reversed(lobby.users.keys()))
                 },
+                "duration": settings.GAME_MAX_DURATION_SECONDS,
+            },
+        )
+        formatted_questions, correct_answers = self.get_and_format_questions(lobby.trivia_token)
+        lobby.correct_answers = correct_answers
+        self.send_event_to_lobby("question.data", {"questions": formatted_questions})
+        lobby.question_start_time = datetime.now()
+        self.send_event_to_lobby("question.next")
+
+        lobby.save()
+
+    def receive_question_answered(self, content: QuestionAnsweredEvent):
+        lobby = Lobby.get(self.lobby_name)
+
+        if self.question_answered:
+            return
+
+        self.question_answered = True
+
+        correct_answer = lobby.correct_answers[lobby.current_question_count]
+
+        question_max_duration = timedelta(seconds=settings.QUESTION_MAX_DURATION_SECONDS_MAP[correct_answer.difficulty])
+        if (
+            content["answer"] != correct_answer.answer
+            or datetime.now() > lobby.question_start_time + question_max_duration
+        ):
+            correctly = False
+            damage = settings.QUESTION_DIFFICULTY_DAMAGE_MAP[correct_answer.difficulty]
+            lobby.users[self.user_id]["hp"] -= damage
+        else:
+            damage = 0
+            correctly = True
+
+        self.send_event_to_lobby(
+            "user.answered",
+            {
+                "user_id": self.user_id,
+                "correctly": correctly,
+                "correct_answer": correct_answer.answer,
+                "damage": damage,
+            },
+        )
+
+        # question has been answered for the first time
+        if lobby.current_answer_count == 0:
+            lobby.current_answer_count += 1
+            lobby.save()
+            return
+
+        # otherwise, both users have answered the question
+
+        if any(
+            user for user in lobby.users.values() if user["hp"] <= 0
+        ) or datetime.now() > lobby.game_start_time + timedelta(seconds=settings.GAME_MAX_DURATION_SECONDS):
+            self.handle_game_end(
+                self.determine_user_status_by_hp(list((user_id, data["hp"]) for user_id, data in lobby.users.items()))
             )
-            formatted_questions, correct_answers = self.get_and_format_questions(lobby.trivia_token)
-            lobby.correct_answers = correct_answers
+            return
+
+        # current set of questions has been exhausted, obtain new ones
+        if lobby.current_question_count == settings.TRIVIA_API_QUESTION_AMOUNT - 1:
+            lobby.current_question_count = 0
+
+            formatted_questions, correct_answer = self.get_and_format_questions(lobby.trivia_token)
+            lobby.correct_answers = correct_answer
             self.send_event_to_lobby("question.data", {"questions": formatted_questions})
-            lobby.question_start_time = datetime.now()
-            self.send_event_to_lobby("question.next")
+        else:
+            lobby.current_question_count += 1
 
-            lobby.save()
+        lobby.current_answer_count = 0
+        lobby.question_start_time = datetime.now()
+        lobby.save()
 
-        elif content["type"] == "question.answered":
-            content: QuestionAnsweredEvent
+        self.send_event_to_lobby("question.next")
 
-            lobby = Lobby.get(self.lobby_name)
+    def receive_fifty_request(self, content: FiftyRequestedEvent):
+        if self.fifty_used:
+            return
 
-            if self.question_answered:
-                return
+        self.fifty_used = True
 
-            self.question_answered = True
+        lobby = Lobby.get(self.lobby_name)
+        correct_answer = lobby.correct_answers[lobby.current_question_count].answer
+        if correct_answer in ("True", "False") or len(content["answers"]) != 4:
+            return
 
-            correct_answer = lobby.correct_answers[lobby.current_question_count]
+        incorrect_answers = tuple(answer for answer in content["answers"] if answer != correct_answer)
+        if len(incorrect_answers) != 3:
+            return
 
-            question_max_duration = timedelta(
-                seconds=settings.QUESTION_MAX_DURATION_SECONDS_MAP[correct_answer.difficulty]
-            )
-            if (
-                content["answer"] != correct_answer.answer
-                or datetime.now() > lobby.question_start_time + question_max_duration
-            ):
-                correctly = False
-                damage = settings.QUESTION_DIFFICULTY_DAMAGE_MAP[correct_answer.difficulty]
-                lobby.users[self.user_id]["hp"] -= damage
-            else:
-                damage = 0
-                correctly = True
-
-            self.send_event_to_lobby(
-                "user.answered",
-                {
-                    "user_id": self.user_id,
-                    "correctly": correctly,
-                    "correct_answer": correct_answer.answer,
-                    "damage": damage,
-                },
-            )
-
-            # question has been answered for the first time
-            if lobby.current_answer_count == 0:
-                lobby.current_answer_count += 1
-                lobby.save()
-                return
-
-            # otherwise, both users have answered the question
-
-            if any(
-                user for user in lobby.users.values() if user["hp"] <= 0
-            ) or datetime.now() > lobby.game_start_time + timedelta(seconds=settings.GAME_MAX_DURATION_SECONDS):
-                self.handle_game_end(
-                    self.determine_user_status_by_hp(
-                        list((user_id, data["hp"]) for user_id, data in lobby.users.items())
-                    )
-                )
-                return
-
-            # current set of questions has been exhausted, obtain new ones
-            if lobby.current_question_count == settings.TRIVIA_API_QUESTION_AMOUNT - 1:
-                lobby.current_question_count = 0
-
-                formatted_questions, correct_answer = self.get_and_format_questions(lobby.trivia_token)
-                lobby.correct_answers = correct_answer
-                self.send_event_to_lobby("question.data", {"questions": formatted_questions})
-            else:
-                lobby.current_question_count += 1
-
-            lobby.current_answer_count = 0
-            lobby.question_start_time = datetime.now()
-            lobby.save()
-
-            self.send_event_to_lobby("question.next")
-
-        elif content["type"] == "fifty.request":
-            content: FiftyRequestedEvent
-
-            if self.fifty_used:
-                return
-
-            self.fifty_used = True
-
-            lobby = Lobby.get(self.lobby_name)
-            correct_answer = lobby.correct_answers[lobby.current_question_count].answer
-            if correct_answer in ("True", "False") or len(content["answers"]) != 4:
-                return
-
-            incorrect_answers = tuple(answer for answer in content["answers"] if answer != correct_answer)
-            if len(incorrect_answers) != 3:
-                return
-
-            random_incorrect_answers = random.sample(incorrect_answers, k=2)
-            self.send_event_to_lobby(
-                "fifty.response", {"user_id": self.user_id, "incorrect_answers": random_incorrect_answers}
-            )
+        random_incorrect_answers = random.sample(incorrect_answers, k=2)
+        self.send_event_to_lobby(
+            "fifty.response", {"user_id": self.user_id, "incorrect_answers": random_incorrect_answers}
+        )
 
     def send_event_to_lobby(self, msg_type: str, data: dict = None) -> None:
         """Wrapper function to broadcast messages to the lobby's channel group"""

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from .models import Lobby, UserGame, Game
-from .types import GameType, GameStatus
+from .models import Game, Lobby, UserGame
+from .types import GameStatus, GameType
 
 
 class LobbySerializer(serializers.Serializer):
