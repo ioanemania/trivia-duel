@@ -260,7 +260,7 @@ class GameScreen(Screen):
         super().__init__()
 
     def compose(self) -> ComposeResult:
-        yield Static("Loading In...")
+        yield Static("Waiting for an opponent...", id="static-info")
 
     async def on_mount(self):
         self.ws = await self.app.client.ws_join_lobby(self.lobby, self.token)
@@ -277,19 +277,24 @@ class GameScreen(Screen):
     async def handle_ws_event(self, event) -> None:
         if event["type"] == "game.prepare":
             self.game_in_progress = True
+
+            info = self.query_one("#static-info", Static)
+            info.renderable = "Opponent found! Loading in..."
+            info.refresh()
+            confirm_leave = ConfirmLeaveModal(id="confirm-leave")
+            confirm_leave.display = "none"
+            await self.mount(confirm_leave)
+
             await self.ws.send(json.dumps({"type": "game.ready"}))
 
         elif event["type"] == "game.start":
             opponent_name = event["opponent"]
             duration = event["duration"]
 
-            await self.clear_widgets()
-            await self.mount(GameHeader(self.app.username, opponent_name, duration))
+            confirm_leave = self.query_one("#confirm-leave", ConfirmLeaveModal)
+            await self.query_one("#static-info", Static).remove()
+            await self.mount(GameHeader(self.app.username, opponent_name, duration), before=confirm_leave)
             await self.mount(Container(id="container-question"))
-
-            confirm_leave = ConfirmLeaveModal(id="confirm-leave")
-            confirm_leave.display = "none"
-            await self.mount(confirm_leave)
 
         elif event["type"] == "question.data":
             self.questions = event["questions"]
@@ -364,20 +369,35 @@ class GameScreen(Screen):
                 await self.clear_widgets()
                 await self.app.fixed_pop_screen()
             case "confirm-reject":
-                self.query_one("#container-question").display = "block"
                 self.query_one("#confirm-leave").display = "none"
+
+                try:
+                    self.query_one("#container-question").display = "block"
+                except NoMatches:
+                    pass
+
                 self.set_focus(None)
             case _:
                 raise Exception("Unexpected button event received")
 
     async def on_key(self, event: events.Key):
-        if event.key == "escape" and self.game_in_progress:
-            event.prevent_default()
-            question_container = self.query_one("#container-question")
-            confirm_leave = self.query_one("#confirm-leave")
+        if event.key == "escape":
+            if not self.game_in_progress:
+                if self.ws:
+                    await self.ws.close()
+                return
 
-            question_container.display = "none" if question_container.display else "block"
+            event.prevent_default()
+
+            confirm_leave = self.query_one("#confirm-leave")
             confirm_leave.display = "none" if confirm_leave.display else "block"
+
+            try:
+                question_container = self.query_one("#container-question")
+                question_container.display = "none" if question_container.display else "block"
+            except NoMatches:
+                pass
+
             self.set_focus(None)
 
     async def clear_widgets(self) -> None:

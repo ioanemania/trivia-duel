@@ -9,7 +9,7 @@ from .messages import BackButtonPressed
 from .screens import LoginOrRegisterScreen
 from .clients import TriviaClient
 
-TRIVIA_SERVER_URL = "localhost:8000"
+TRIVIA_SERVER_URL = "app:8000/"
 
 
 class BaseApp(App):
@@ -37,7 +37,7 @@ class BaseApp(App):
         self.uninstall_screen(old_screen)
 
 
-class TriviaApp(App):
+class TriviaApp(BaseApp):
     DEFAULT_CSS = """
      Screen {
         height: 100%;
