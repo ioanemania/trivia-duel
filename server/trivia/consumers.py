@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from jwt.exceptions import InvalidTokenError
 from redis_om.model.model import NotFoundError
 
-from .models import Game, Lobby, LobbyState, UserGame
+from .models import Game, Lobby, LobbyState
 from .types import (
     HP,
     ClientEvent,
@@ -106,20 +106,23 @@ class GameConsumer(JsonWebsocketConsumer):
         del lobby.users[self.user_id]
         lobby.save()
 
-    def receive_json(self, content: ClientEvent, **kwargs):
+    def receive_json(self, event: ClientEvent, **kwargs):
         """
         Try to call a handler associated with the received event type.
         """
 
-        match content["type"]:
+        if not (event_type := event.get("type")):
+            return
+
+        match event_type:
             case "game.ready":
-                self.receive_game_ready(content)
+                self.receive_game_ready(event)
             case "question.answered":
-                content: QuestionAnsweredEvent
-                self.receive_question_answered(content)
+                event: QuestionAnsweredEvent
+                self.receive_question_answered(event)
             case "fifty.request":
-                content: FiftyRequestedEvent
-                self.receive_fifty_request(content)
+                event: FiftyRequestedEvent
+                self.receive_fifty_request(event)
             case _:
                 return
 
@@ -156,7 +159,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         lobby.save()
 
-    def receive_question_answered(self, content: QuestionAnsweredEvent):
+    def receive_question_answered(self, event: QuestionAnsweredEvent):
         lobby = Lobby.get(self.lobby_name)
 
         if self.question_answered:
@@ -168,7 +171,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         question_max_duration = timedelta(seconds=settings.QUESTION_MAX_DURATION_SECONDS_MAP[correct_answer.difficulty])
         if (
-            content["answer"] != correct_answer.answer
+            event["answer"] != correct_answer.answer
             or datetime.now() > lobby.question_start_time + question_max_duration
         ):
             correctly = False
@@ -220,7 +223,7 @@ class GameConsumer(JsonWebsocketConsumer):
 
         self.send_event_to_lobby("question.next")
 
-    def receive_fifty_request(self, content: FiftyRequestedEvent):
+    def receive_fifty_request(self, event: FiftyRequestedEvent):
         if self.fifty_used:
             return
 
@@ -228,10 +231,10 @@ class GameConsumer(JsonWebsocketConsumer):
 
         lobby = Lobby.get(self.lobby_name)
         correct_answer = lobby.correct_answers[lobby.current_question_count].answer
-        if correct_answer in ("True", "False") or len(content["answers"]) != 4:
+        if correct_answer in ("True", "False") or len(event["answers"]) != 4:
             return
 
-        incorrect_answers = tuple(answer for answer in content["answers"] if answer != correct_answer)
+        incorrect_answers = tuple(answer for answer in event["answers"] if answer != correct_answer)
         if len(incorrect_answers) != 3:
             return
 
@@ -253,29 +256,25 @@ class GameConsumer(JsonWebsocketConsumer):
         lobby.state = LobbyState.FINISHED
         lobby.save()
 
-        game = Game(
-            type=GameType.RANKED if lobby.ranked else GameType.NORMAL,
-        )
-        game.save()
-
         user_status_dict: dict[str, UserStatus] = {}
-        user_objects = User.objects.filter(pk__in=(users.keys()))
-        for user, opponent in zip(user_objects, reversed(user_objects)):
-            status = users[user.pk]
+        user1, user2 = User.objects.filter(pk__in=(users.keys()))
+        user1_status, user2_status = users[user1.pk], users[user2.pk]
+
+        for user, status in (user1, user1_status), (user2, user2_status):
             rank_gain = self.determine_rank_gain_by_game_status(status)
             if lobby.ranked:
                 user.rank = max(user.rank + rank_gain, 0)
                 user.save()
 
-            UserGame(
-                user=user,
-                opponent=opponent,
-                game=game,
-                status=status,
-                rank=user.rank,
-            ).save()
-
             user_status_dict[str(user.pk)] = {"status": status, "rank_gain": rank_gain}
+
+        Game.objects.save_multiplayer_game(
+            game_type=GameType.RANKED if lobby.ranked else GameType.NORMAL,
+            user1=user1,
+            user2=user2,
+            user1_status=user1_status,
+            user2_status=user2_status,
+        )
 
         self.send_event_to_lobby("game.end", {"users": user_status_dict})
 

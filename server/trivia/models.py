@@ -30,6 +30,11 @@ class Lobby(JsonModel):
     question_start_time: datetime = 0
 
 
+# Before we can run queries, we need to run migrations to set up the
+# indexes that Redis OM will use.
+Migrator().run()
+
+
 class Game(models.Model):
     type = models.IntegerField(choices=GameType.choices)
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -63,7 +68,7 @@ class Game(models.Model):
 
             return game, user1_game, user2_game
 
-        def save_training_game(self, user: User) -> tuple["Game", "UserGame"]:
+        def save_training_game(self, user: User) -> tuple["Game", "UserGame"]:  # noqa
             """
             Creates and saves a new training Game and associated UserGame records in the database.
 
@@ -88,6 +93,3 @@ class UserGame(models.Model):
     status = models.IntegerField(choices=GameStatus.choices)
     rank = models.PositiveIntegerField()
     extra_data = models.JSONField(null=True)
-
-
-Migrator().run()  # TODO: Move this statement
