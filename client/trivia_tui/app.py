@@ -12,6 +12,31 @@ from .clients import TriviaClient
 TRIVIA_SERVER_URL = "localhost:8000"
 
 
+class BaseApp(App):
+    async def fixed_pop_screen(self) -> Screen:
+        """
+        Installs, Pops and Uninstalls the screen.
+        Without installing the screen first, popping does not work as intended.
+        """
+
+        screen = self.screen
+        await self.install_screen(screen)
+        self.pop_screen()
+        self.uninstall_screen(screen)
+        return screen
+
+    async def fixed_switch_screen(self, screen: Screen | str):
+        """
+        Installs, Switches and Uninstalls the screen.
+        Without installing the screen first, switching does not work as intended.
+        """
+
+        old_screen = self.screen
+        await self.install_screen(old_screen)
+        await self.switch_screen(screen)
+        self.uninstall_screen(old_screen)
+
+
 class TriviaApp(App):
     DEFAULT_CSS = """
      Screen {
@@ -41,26 +66,3 @@ class TriviaApp(App):
 
     async def on_back_button_pressed(self):
         await self.fixed_pop_screen()
-
-    async def fixed_pop_screen(self) -> Screen:
-        """
-        Installs, Pops and Uninstalls the screen.
-        Without installing the screen first, popping does not work as intended.
-        """
-
-        screen = self.screen
-        await self.install_screen(screen)
-        self.pop_screen()
-        self.uninstall_screen(screen)
-        return screen
-
-    async def fixed_switch_screen(self, screen: Screen | str) -> AwaitMount:
-        """
-        Installs, Switches and Uninstalls the screen.
-        Without installing the screen first, switching does not work as intended.
-        """
-
-        old_screen = self.screen
-        await self.install_screen(old_screen)
-        await self.switch_screen(screen)
-        self.uninstall_screen(old_screen)

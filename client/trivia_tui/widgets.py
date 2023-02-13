@@ -11,8 +11,14 @@ from textual.widget import Widget
 from textual.widgets import Static, Button, DataTable
 from typing import Optional
 
-from .messages import TrainingQuestionAnswered, CountdownFinished, FiftyFiftyTriggered, GameTimedOut, QuestionAnswered, \
-    BackButtonPressed
+from .messages import (
+    TrainingQuestionAnswered,
+    CountdownFinished,
+    FiftyFiftyTriggered,
+    GameTimedOut,
+    QuestionAnswered,
+    BackButtonPressed,
+)
 from .types import QuestionData, TrainingQuestionData
 from .utils import convert_difficulty_to_stars
 

@@ -2,6 +2,7 @@ from typing import TypedDict, Literal
 
 Difficulty = Literal["easy"] | Literal["medium"] | Literal["hard"]
 
+
 class QuestionData(TypedDict):
     category: str
     type: Literal["boolean"] | Literal["multiple"]
@@ -18,4 +19,3 @@ class TrainingQuestionData(TypedDict):
     question: str
     correct_answer: str
     incorrect_answers: list[str]
-

@@ -6,7 +6,7 @@ import websockets
 from contextlib import suppress
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal
+from textual.containers import Container
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static, DataTable
@@ -20,6 +20,8 @@ from .widgets import Question, GameStatus, GameHistoryTable, GameHeader, Trainin
 
 
 class LoginOrRegisterScreen(Screen):
+    """Authentication screen from where the user can either log in or register"""
+
     def compose(self) -> ComposeResult:
         yield Input(placeholder="username", id="username")
         yield Input(placeholder="password", id="password", password=True)
@@ -51,6 +53,8 @@ class LoginOrRegisterScreen(Screen):
 
 
 class MainMenuScreen(Screen):
+    """Main menu screen from which the user has access to all of Trivia Duel's functionality"""
+
     def compose(self) -> ComposeResult:
         yield Button("Play", id="btn-play")
         yield Button("Leaderboard", id="btn-leaderboard")
@@ -67,6 +71,8 @@ class MainMenuScreen(Screen):
 
 
 class PlayMenuScreen(Screen):
+    """Play screen from which the user has access to different trivia game modes"""
+
     def compose(self) -> ComposeResult:
         yield Button("Ranked", id="btn-ranked")
         yield Button("Normal", id="btn-normal")
@@ -83,6 +89,15 @@ class PlayMenuScreen(Screen):
 
 
 class TrainingScreen(Screen):
+    """
+    Screen where the training games are played out. The user is given 10 trivia questions
+    that they have to answer, there is no time limit and the user is also allowed to skip over questions.
+    Skipped questions will reappear after all other questions.
+
+    After the user has answered all questions, the client saves  a record
+    of the played game on the server.
+    """
+
     def __init__(self):
         self.questions: Optional[deque[TrainingQuestionData]] = None
         super().__init__()
@@ -116,22 +131,23 @@ class TrainingScreen(Screen):
             case "Next":
                 self.questions.popleft()
             case _:
-                raise Exception("Unexpected button press event received")
+                return
 
         await self.mount_next_question()
 
     async def clear_widgets(self) -> None:
+        """Remove all widgets from the screen and reset widget focus to None"""
+
         for child in self.walk_children():
             await child.remove()
 
         self.set_focus(None)
 
     async def mount_next_question(self) -> None:
+        """Remove all widgets and mount a new instance of Training Question and action button"""
+
         await self.clear_widgets()
-        try:
-            await self.mount(TrainingQuestion(self.questions[0]))
-        except IndexError:
-            pass
+        await self.mount(TrainingQuestion(self.questions[0]))
         await self.mount(Button("Skip", id="btn-action"))
 
     async def on_key(self, event: events.Key):
@@ -140,6 +156,10 @@ class TrainingScreen(Screen):
 
 
 class JoinOrHostScreen(Screen):
+    """
+    Screen from which the user can choose to either join or host a multiplayer game.
+    """
+
     def __init__(self, game_type: str):
         self.game_type = game_type
         super().__init__()
@@ -157,6 +177,8 @@ class JoinOrHostScreen(Screen):
 
 
 class HostScreen(Screen):
+    """Screen from which the user can host a multiplayer game."""
+
     def __init__(self, game_type: str):
         self.game_type = game_type
         super().__init__()
@@ -183,6 +205,8 @@ class HostScreen(Screen):
 
 
 class JoinScreen(Screen):
+    """Screen from which the user can join a multiplayer game."""
+
     def __init__(self, game_type: str):
         self.game_type = game_type
         super().__init__()
@@ -217,6 +241,11 @@ class JoinScreen(Screen):
 
 
 class GameScreen(Screen):
+    """
+    Screen from which a multiplayer game is played. Used to play both
+    ranked and normal game modes.
+    """
+
     def __init__(self, lobby: str, token: str):
         self.lobby = lobby
         self.token = token
@@ -238,6 +267,8 @@ class GameScreen(Screen):
         asyncio.create_task(self.receive_ws())
 
     async def receive_ws(self) -> None:
+        """Coroutine that listens for incoming websocket events from the server"""
+
         with suppress(websockets.ConnectionClosedOK):
             while True:
                 event = await self.ws.recv()
@@ -407,6 +438,7 @@ class InfoScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(self.msg)
         yield BackButton("Okay")
+
 
 class ErrorScreen(Screen):
     def __init__(self, error: ResponseError, *args, **kwargs):

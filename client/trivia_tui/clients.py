@@ -33,7 +33,9 @@ class TriviaClient:
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
 
-    def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> ResponseError | Response:
+    def _make_request(
+        self, method: str, url: str, authenticated: bool = True, *args, **kwargs
+    ) -> ResponseError | Response:
         if authenticated and not self.access_token:
             raise Exception("Trying to make an authenticated request without being authenticated")
 
