@@ -7,7 +7,7 @@ from textual.screen import Screen
 from .clients import TriviaClient
 from .screens import LoginOrRegisterScreen
 
-TRIVIA_SERVER_URL = "app:8000/"
+TRIVIA_SERVER_URL = "app:8000"
 
 
 class BaseApp(App):
@@ -49,8 +49,8 @@ class TriviaApp(BaseApp):
     }
     """
 
-    def __init__(self, *args, **kwargs):
-        self.client = TriviaClient(TRIVIA_SERVER_URL)
+    def __init__(self, trivia_server_url: str, *args, **kwargs):
+        self.client = TriviaClient(trivia_server_url)
         self.username: Optional[str] = None
 
         super().__init__(*args, **kwargs)
