@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from core.settings import BASE_DIR
+from core.settings.base import BASE_DIR
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -14,9 +14,7 @@ from trivia.types import GameStatus, GameType
 FIXTURES_PATH = BASE_DIR / "fixtures"
 
 User = get_user_model()
-
-test_db = get_redis_connection(url=settings.REDIS_OM_TEST_URL)
-Lobby.Meta.database = test_db
+redis = get_redis_connection()
 
 
 class LobbyViewSetTestCase(APITestCase):
@@ -32,8 +30,8 @@ class LobbyViewSetTestCase(APITestCase):
         self.lobby.save()
 
     def tearDown(self):
-        for key in test_db.scan_iter("*"):
-            test_db.delete(key)
+        for key in redis.scan_iter("*"):
+            redis.delete(key)
 
     def test_create_lobby(self):
         url = reverse("lobby-list")

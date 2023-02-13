@@ -6,7 +6,7 @@ from unittest.mock import ANY, MagicMock, call, patch
 from channels.auth import AuthMiddlewareStack
 from channels.exceptions import AcceptConnection, DenyConnection
 from channels.routing import URLRouter
-from core.settings import BASE_DIR
+from core.settings.base import BASE_DIR
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -33,8 +33,7 @@ FIXTURES_PATH = BASE_DIR / "fixtures"
 application = AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
 
 User = get_user_model()
-test_db = get_redis_connection(url=settings.REDIS_OM_TEST_URL)
-Lobby.Meta.database = test_db
+redis = get_redis_connection()
 
 
 class GameConsumerTestCase(TestCase):
@@ -90,8 +89,8 @@ class GameConsumerTestCase(TestCase):
         self.get_token_patcher.stop()
         self.send_event_to_lobby_patcher.stop()
 
-        for key in test_db.scan_iter("*"):
-            test_db.delete(key)
+        for key in redis.scan_iter("*"):
+            redis.delete(key)
 
     def test_unauthenticated_user_connect(self):
         with self.assertRaises(DenyConnection):

@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # Quick-start development settings - unsuitable for production
@@ -75,24 +75,6 @@ TEMPLATES = [
 
 ASGI_APPLICATION = "core.asgi.application"
 
-
-# Database
-# https://docs.djangoproject.com/en/4.1/ref/settings/#databases
-
-POSTGRES_HOST = os.environ["POSTGRES_HOST"]
-POSTGRES_USER = os.environ["POSTGRES_USER"]
-POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]
-POSTGRES_DB = os.environ["POSTGRES_DB"]
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql_psycopg2",
-        "NAME": POSTGRES_DB,
-        "USER": POSTGRES_USER,
-        "PASSWORD": POSTGRES_PASSWORD,
-        "HOST": POSTGRES_HOST,
-    }
-}
 
 FIXTURE_DIRS = [BASE_DIR / "fixtures/"]
 
@@ -161,14 +143,3 @@ LOBBY_EXPIRE_SECONDS = 10
 # REDIS
 
 REDIS_OM_URL = os.environ["REDIS_OM_URL"]
-REDIS_OM_TEST_URL = os.environ["REDIS_OM_TEST_URL"]
-REDIS_CHANNEL_LAYER_URL = os.environ["REDIS_CHANNEL_LAYER_URL"]
-
-# CHANNELS
-
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [REDIS_CHANNEL_LAYER_URL]},
-    }
-}
