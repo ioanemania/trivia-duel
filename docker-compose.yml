@@ -8,8 +8,8 @@ services:
     build: server/
     ports:
       - "8000:8000"
-    environment:
-      - REDIS_OM_URL=redis://@redis:6379
+    env_file:
+      - server/.env
     volumes:
       - ./server/:/app
     depends_on:

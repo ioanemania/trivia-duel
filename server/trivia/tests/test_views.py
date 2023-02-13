@@ -16,7 +16,7 @@ FIXTURES_PATH = BASE_DIR / "fixtures"
 
 User = get_user_model()
 
-test_db = get_redis_connection(url="redis://@redis:6379/1")
+test_db = get_redis_connection(url=settings.REDIS_OM_TEST_URL)
 Lobby.Meta.database = test_db
 
 

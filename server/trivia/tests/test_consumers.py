@@ -35,7 +35,7 @@ FIXTURES_PATH = BASE_DIR / "fixtures"
 application = AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
 
 User = get_user_model()
-test_db = get_redis_connection(url="redis://@redis:6379/1")
+test_db = get_redis_connection(url=settings.REDIS_OM_TEST_URL)
 Lobby.Meta.database = test_db
 
 
@@ -277,7 +277,7 @@ class GameConsumerTestCase(TestCase):
                 call(
                     "game.start",
                     {
-                        "users": {self.user1.id: self.user2.username, self.user2.id: self.user1.username},
+                        "users": {str(self.user1.id): self.user2.username, str(self.user2.id): self.user1.username},
                         "duration": settings.GAME_MAX_DURATION_SECONDS,
                     },
                 ),
@@ -725,8 +725,8 @@ class GameConsumerTestCase(TestCase):
             "game.end",
             {
                 "users": {
-                    self.user1.id: {"status": GameStatus.WIN, "rank_gain": ANY},
-                    self.user2.id: {"status": GameStatus.LOSS, "rank_gain": ANY},
+                    str(self.user1.id): {"status": GameStatus.WIN, "rank_gain": ANY},
+                    str(self.user2.id): {"status": GameStatus.LOSS, "rank_gain": ANY},
                 }
             },
         )
@@ -763,8 +763,8 @@ class GameConsumerTestCase(TestCase):
             "game.end",
             {
                 "users": {
-                    self.user1.id: {"status": GameStatus.WIN, "rank_gain": 20},
-                    self.user2.id: {"status": GameStatus.LOSS, "rank_gain": -20},
+                    str(self.user1.id): {"status": GameStatus.WIN, "rank_gain": 20},
+                    str(self.user2.id): {"status": GameStatus.LOSS, "rank_gain": -20},
                 }
             },
         )
@@ -782,14 +782,14 @@ class GameConsumerTestCase(TestCase):
         event = {
             "type": "game.start",
             "duration": settings.GAME_MAX_DURATION_SECONDS,
-            "users": {self.user1.id: self.user2.username, self.user2.id: self.user1.username},
+            "users": {str(self.user1.id): self.user2.username, str(self.user2.id): self.user1.username},
         }
         self.game_consumer.user_id = self.user1.id
 
         self.game_consumer.game_start(event)
 
         mock_send_json.assert_called_once_with(
-            {"type": event["type"], "duration": event["duration"], "opponent": event["users"][self.user1.id]}
+            {"type": event["type"], "duration": event["duration"], "opponent": event["users"][str(self.user1.id)]}
         )
 
     @patch("trivia.consumers.GameConsumer.close")
@@ -798,8 +798,8 @@ class GameConsumerTestCase(TestCase):
         event: GameEndEvent = {
             "type": "game.end",
             "users": {
-                self.user1.id: {"status": GameStatus.WIN, "rank_gain": ANY},
-                self.user2.id: {"status": GameStatus.LOSS, "rank_gain": ANY},
+                str(self.user1.id): {"status": GameStatus.WIN, "rank_gain": ANY},
+                str(self.user2.id): {"status": GameStatus.LOSS, "rank_gain": ANY},
             },
         }
         self.game_consumer.user_id = self.user1.id
@@ -809,8 +809,8 @@ class GameConsumerTestCase(TestCase):
         mock_send_json.assert_called_once_with(
             {
                 "type": event["type"],
-                "status": event["users"][self.user1.id]["status"].name.lower(),
-                "rank_gain": event["users"][self.user1.id]["rank_gain"],
+                "status": event["users"][str(self.user1.id)]["status"].name.lower(),
+                "rank_gain": event["users"][str(self.user1.id)]["rank_gain"],
             }
         )
         mock_close.assert_called_once()
@@ -842,13 +842,19 @@ class GameConsumerTestCase(TestCase):
             "user_id": self.user1.id,
             "correctly": True,
             "correct_answer": "CORRECT_ANSWER",
+            "damage": 20,
         }
         self.game_consumer.user_id = self.user1.id
 
         self.game_consumer.user_answered(event)
 
         mock_send_json.assert_called_once_with(
-            {"type": "question.result", "correctly": event["correctly"], "correct_answer": event["correct_answer"]}
+            {
+                "type": "question.result",
+                "correctly": event["correctly"],
+                "correct_answer": event["correct_answer"],
+                "damage": 20,
+            }
         )
 
     @patch("trivia.consumers.GameConsumer.send_json")
@@ -858,16 +864,14 @@ class GameConsumerTestCase(TestCase):
             "user_id": self.user1.id,
             "correctly": True,
             "correct_answer": "CORRECT_ANSWER",
+            "damage": 20,
         }
         self.game_consumer.user_id = self.user2.id
 
         self.game_consumer.user_answered(event)
 
         mock_send_json.assert_called_once_with(
-            {
-                "type": "opponent.answered",
-                "correctly": event["correctly"],
-            }
+            {"type": "opponent.answered", "correctly": event["correctly"], "damage": 20}
         )
 
     @patch("trivia.consumers.GameConsumer.send_json")

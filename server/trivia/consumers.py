@@ -126,7 +126,7 @@ class GameConsumer(JsonWebsocketConsumer):
                 "game.start",
                 {
                     "users": {
-                        user_id: lobby.users[opponent_id]["name"]
+                        str(user_id): lobby.users[opponent_id]["name"]
                         for user_id, opponent_id in zip(lobby.users.keys(), reversed(lobby.users.keys()))
                     },
                     "duration": settings.GAME_MAX_DURATION_SECONDS,
@@ -250,7 +250,7 @@ class GameConsumer(JsonWebsocketConsumer):
         )
         game.save()
 
-        user_status_dict: dict[UserId, UserStatus] = {}
+        user_status_dict: dict[str, UserStatus] = {}
         user_objects = User.objects.filter(pk__in=(users.keys()))
         for user, opponent in zip(user_objects, reversed(user_objects)):
             status = users[user.pk]
@@ -267,7 +267,7 @@ class GameConsumer(JsonWebsocketConsumer):
                 rank=user.rank,
             ).save()
 
-            user_status_dict[user.pk] = {"status": status, "rank_gain": rank_gain}
+            user_status_dict[str(user.pk)] = {"status": status, "rank_gain": rank_gain}
 
         self.send_event_to_lobby("game.end", {"users": user_status_dict})
 
@@ -275,16 +275,15 @@ class GameConsumer(JsonWebsocketConsumer):
         self.send_json(event)
 
     def game_start(self, event: dict):
-        opponent = event["users"][self.user_id]
+        opponent = event["users"][str(self.user_id)]
 
         self.send_json({"type": event["type"], "duration": event["duration"], "opponent": opponent})
 
     def game_end(self, event: GameEndEvent):
-        user_status = event["users"][self.user_id]
+        user_status = event["users"][str(self.user_id)]
+        status = GameStatus(user_status["status"]).name.lower()
 
-        self.send_json(
-            {"type": event["type"], "status": user_status["status"].name.lower(), "rank_gain": user_status["rank_gain"]}
-        )
+        self.send_json({"type": event["type"], "status": status, "rank_gain": user_status["rank_gain"]})
 
         self.close()
 
@@ -296,14 +295,19 @@ class GameConsumer(JsonWebsocketConsumer):
         self.send_json(event)
 
     def user_answered(self, event: dict):
-        if event["user_id"] == self.user_id:
-            event["type"] = "question.result"
-        else:
-            event["type"] = "opponent.answered"
-            del event["correct_answer"]
+        message = {
+            "correctly": event["correctly"],
+            "correct_answer": event["correct_answer"],
+            "damage": event["damage"],
+        }
 
-        del event["user_id"]
-        self.send_json(event)
+        if event["user_id"] == self.user_id:
+            message["type"] = "question.result"
+        else:
+            message["type"] = "opponent.answered"
+            del message["correct_answer"]
+
+        self.send_json(message)
 
     def fifty_response(self, event: dict):
         if event["user_id"] == self.user_id:

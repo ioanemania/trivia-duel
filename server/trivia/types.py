@@ -76,7 +76,7 @@ class ClientEvent(BaseEvent):
 
 
 class GameEndEvent(ServerEvent):
-    users: dict[UserId, UserStatus]
+    users: dict[str, UserStatus]
 
 
 class QuestionAnsweredEvent(ClientEvent):

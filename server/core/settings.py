@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/4.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-t6&jqjat34e$lq-h)3w%(4u@e%_omm1n9kw3375qre-e+ybdp3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -131,10 +131,6 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CHANNELS
-
-CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 # DRF
 
 REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",)}
@@ -147,6 +143,24 @@ TRIVIA_API_TOKEN_URL = "https://opentdb.com/api_token.php?command=request"
 
 QUESTION_DIFFICULTY_DAMAGE_MAP = {"easy": 10, "medium": 20, "hard": 25}
 QUESTION_MAX_DURATION_SECONDS_MAP = {"easy": 30, "medium": 45, "hard": 60}
+
 GAME_MAX_DURATION_SECONDS = 5 * 60
 GAME_RANK_GAIN = 20
+
+# Amount of seconds before a lobby expires after creation
 LOBBY_EXPIRE_SECONDS = 10
+
+# REDIS
+
+REDIS_OM_URL = os.environ["REDIS_OM_URL"]
+REDIS_OM_TEST_URL = os.environ["REDIS_OM_TEST_URL"]
+REDIS_CHANNEL_LAYER_URL = os.environ["REDIS_CHANNEL_LAYER_URL"]
+
+# CHANNELS
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [REDIS_CHANNEL_LAYER_URL]},
+    }
+}
