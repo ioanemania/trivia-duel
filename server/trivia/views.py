@@ -34,7 +34,7 @@ class LobbyViewSet(ViewSet):
         lobby = serializer.Meta.model(**serializer.validated_data)
         lobby.save()
 
-        token = generate_lobby_token(request.user)
+        token = generate_lobby_token(request.user, lobby.name)
 
         lobby.db().expire(lobby.key(), settings.LOBBY_EXPIRE_SECONDS)
 
@@ -67,11 +67,9 @@ class LobbyViewSet(ViewSet):
     @action(detail=True, methods=["post"])
     def join(self, request, pk=None):
         """
-        Generates a lobby authentication token, which can be used to join a lobby.
+        Generates a lobby authentication token.
 
-        The token is not really bound to a specific lobby, it can be used to join any
-        lobby. Validation in this view is used to provide information to the user, actual
-        validation happens when the user tries to connect to the lobby's websocket connection.
+        The token is intended to be used to connect to the lobby's associated websocket endpoint.
         """
         try:
             lobby = Lobby.get(pk)
@@ -87,7 +85,7 @@ class LobbyViewSet(ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        token = generate_lobby_token(request.user)
+        token = generate_lobby_token(request.user, lobby.name)
 
         return Response(data={"token": token}, status=status.HTTP_200_OK)
 

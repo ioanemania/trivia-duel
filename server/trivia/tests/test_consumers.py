@@ -49,8 +49,8 @@ class GameConsumerTestCase(TestCase):
     def setUp(self):
         self.user1, self.user2 = User.objects.all()[:2]
 
-        self.user1_token = generate_lobby_token(self.user1)
-        self.user2_token = generate_lobby_token(self.user2)
+        self.user1_token = generate_lobby_token(self.user1, self.lobby_name)
+        self.user2_token = generate_lobby_token(self.user2, self.lobby_name)
 
         lobby = Lobby(name=self.lobby_name, ranked=1)
         lobby.users = {
@@ -93,6 +93,20 @@ class GameConsumerTestCase(TestCase):
             redis.delete(key)
 
     def test_unauthenticated_user_connect(self):
+        lobby = Lobby.get(self.lobby_name)
+        lobby.users = {}
+        lobby.save()
+
+        with self.assertRaises(DenyConnection):
+            self.game_consumer.connect()
+
+    def test_authenticated_user_with_token_for_wrong_lobby_connect(self):
+        self.game_consumer.scope["query_string"] = generate_lobby_token(self.user1, "SOME_OTHER_LOBBY").encode()
+
+        lobby = Lobby.get(self.lobby_name)
+        lobby.users = {}
+        lobby.save()
+
         with self.assertRaises(DenyConnection):
             self.game_consumer.connect()
 
@@ -131,7 +145,7 @@ class GameConsumerTestCase(TestCase):
 
     def test_more_than_two_users_connect(self):
         user3 = User.objects.all()[2]
-        self.game_consumer.scope["query_string"] = generate_lobby_token(user3)
+        self.game_consumer.scope["query_string"] = generate_lobby_token(user3, self.lobby_name)
 
         with self.assertRaises(DenyConnection):
             self.game_consumer.connect()

@@ -3,7 +3,10 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import requests
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from trivia.types import TriviaAPIQuestion
+
+User = get_user_model()
 
 
 class TriviaAPIClient:
@@ -43,9 +46,32 @@ def parse_boolean_string(value: str) -> bool:
     return true_false_bool[true_false_str.index(value.lower())]
 
 
-def generate_lobby_token(user) -> str:
+def generate_lobby_token(user: User, lobby_name: str) -> str:
+    """
+    Generate a lobby authentication token.
+
+    The token is a JWT intended to be used by users to connect to the
+    GameConsumer websocket consumer.
+
+    The token has a very short lifetime and is intended to be used immediately
+    after being obtained.
+
+    Args:
+        user: user for which the token is generated for
+        lobby_name: name of the lobby for which the token is generated for
+
+    Returns:
+        base64 encoded JWT
+
+    """
+
     token = jwt.encode(
-        {"id": user.id, "username": user.username, "exp": datetime.now(tz=timezone.utc) + timedelta(seconds=5)},
+        {
+            "id": user.id,
+            "username": user.username,
+            "lobby_name": lobby_name,
+            "exp": datetime.now(tz=timezone.utc) + timedelta(seconds=5),
+        },
         settings.SECRET_KEY,
         algorithm="HS256",
     )

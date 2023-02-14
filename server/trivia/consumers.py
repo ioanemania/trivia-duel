@@ -61,6 +61,9 @@ class GameConsumer(JsonWebsocketConsumer):
         except InvalidTokenError:
             raise DenyConnection()
 
+        if token_data["lobby_name"] != self.lobby_name:
+            raise DenyConnection()
+
         if lobby.users.get(token_data["id"]):
             raise DenyConnection()
 
