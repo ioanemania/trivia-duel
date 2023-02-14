@@ -36,18 +36,14 @@ class BaseApp(App):
 
 
 class TriviaApp(BaseApp):
-    DEFAULT_CSS = """
-     Screen {
-        height: 100%;
-        margin: 4 8;
-        padding: 1 2;
-        align: center middle;
-    }
-
-    Static {
-        content-align: center middle;
-    }
     """
+    The Trivia Duel App
+
+    Allows the user to interact with a Trivia Duel Server, play multiplayer trivia games,
+    play training games, view leaderboards and game history.
+    """
+
+    CSS_PATH = "css/main.css"
 
     def __init__(self, trivia_server_url: str, *args, **kwargs):
         self.client = TriviaClient(trivia_server_url)
@@ -56,10 +52,14 @@ class TriviaApp(BaseApp):
         super().__init__(*args, **kwargs)
 
     async def on_mount(self) -> None:
-        await self.push_screen(LoginOrRegisterScreen())
+        await self.fixed_switch_screen(LoginOrRegisterScreen())
 
     async def on_key(self, event: events.Key):
-        if event.key == "escape" and len(self.screen_stack) > 2:
+        if event.key == "escape":
+            if len(self.screen_stack) == 1:
+                self.exit()
+                return
+
             await self.fixed_pop_screen()
 
     async def on_back_button_pressed(self):

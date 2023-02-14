@@ -22,6 +22,14 @@ from .utils import convert_difficulty_to_stars
 
 
 class Question(Static):
+    """
+    A multiplayer trivia question widget.
+
+    The widget consists of the question, buttons for all possible answers and a countdown.
+
+    The answer buttons emit a QuestionAnswered event whenever one of them is pressed.
+    """
+
     def __init__(self, question_data: QuestionData, *args, **kwargs):
         self.question_data = question_data
         self.chosen_answer: Optional[Button] = None
@@ -68,6 +76,14 @@ class Question(Static):
 
 
 class TrainingQuestion(Static):
+    """
+    A training question widget.
+
+    Consist of the question and buttons for all answers.
+
+    The answer buttons emit TrainingQuestionAnswered event whenever one of them is pressed.
+    """
+
     def __init__(self, question_data: TrainingQuestionData, *args, **kwargs):
         self.question_data = question_data
 
@@ -112,6 +128,13 @@ class TrainingQuestion(Static):
 
 
 class Countdown(Static):
+    """
+    A countdown widget.
+
+    Counts down from a starting number and emits a CountdownFinished event
+    when the number reaches 0.
+    """
+
     seconds = reactive(0)
 
     def __init__(self, duration: int, *args, **kwargs):
@@ -135,16 +158,25 @@ class Countdown(Static):
 
 
 class GameStatus(Static):
+    """Game status widget, used to display the results of a multiplayer game."""
+
     def __init__(self, status: str, *args, **kwargs):
         self.status = status
 
         super().__init__(*args, **kwargs)
 
     def compose(self) -> ComposeResult:
-        yield Static(self.status)
+        if self.status == "win":
+            yield Static("You won the game!")
+        elif self.status == "loss":
+            yield Static("You lost the game!")
+        elif self.status == "draw":
+            yield Static("The game was a draw!")
 
 
 class GameHistoryTable(DataTable):
+    """Table that displays a history of previously played games."""
+
     def __init__(self, data: list[dict]):
         self.game_data = data
         super().__init__()
@@ -169,33 +201,10 @@ class GameHistoryTable(DataTable):
 
 
 class GameHeader(Widget):
-    DEFAULT_CSS = """
-    GameHeader {
-        dock: top;
-        width: 100%;
-        background: $foreground 5%;
-        color: $text;
-        height: 1;
-    }
+    """
+    A header widget that displays information about an ongoing game.
 
-    #countdown {
-        content-align: center middle;
-        width: 100%;
-    }
-
-    #section-player {
-        dock: left;
-        padding: 0 1;
-        width: 30%;
-        content-align: left middle;
-    }
-
-    #section-opponent {
-        dock: right;
-        padding: 0 1;
-        width: 30%;
-        content-align: right middle;
-    }
+    Consists of the usernames and health points of both players and the game time countdown.
     """
 
     def __init__(self, player_name: str, opponent_name: str, duration: int, *children: Widget, **kwargs):
@@ -222,6 +231,8 @@ class GameHeader(Widget):
 
 
 class PlayerHeaderSection(Static):
+    """Widget that that displays the username and health points of a user"""
+
     def __init__(self, player_name: str, reverse: bool = False, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -238,6 +249,12 @@ class PlayerHeaderSection(Static):
 
 
 class BackButton(Static):
+    """
+    A custom button used to go back to a previous screen.
+
+    Emits a BackButtonPressed event whenever it is pressed.
+    """
+
     def __init__(self, label: TextType, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -252,6 +269,11 @@ class BackButton(Static):
 
 
 class ConfirmLeaveModal(Static):
+    """
+    A widget used to display a confirmation modal,
+    used to confirm when a user wants to leave a multiplayer game
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

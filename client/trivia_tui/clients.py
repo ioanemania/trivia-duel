@@ -6,7 +6,11 @@ import requests
 import websockets
 from requests import Response
 from requests.auth import AuthBase
-from trivia_tui.exceptions import RefreshTokenExpiredError, ResponseError
+from trivia_tui.exceptions import (
+    RefreshTokenExpiredError,
+    ResponseError,
+    UnAuthenticatedRequestError,
+)
 from trivia_tui.types import TrainingQuestionData
 
 
@@ -21,7 +25,7 @@ class TokenAuth(AuthBase):
 
 
 class TriviaClient:
-    """Class that handles communication with a Trivia Duel Server"""
+    """Class that handles communication with a Trivia Duel Server."""
 
     def __init__(self, base_url: str):
         self.base_url = base_url[:-1] if base_url.endswith("/") else base_url
@@ -31,11 +35,27 @@ class TriviaClient:
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
 
-    def _make_request(
-        self, method: str, url: str, authenticated: bool = True, *args, **kwargs
-    ) -> ResponseError | Response:
+    def _make_request(self, method: str, url: str, authenticated: bool = True, *args, **kwargs) -> Response:
+        """
+        Makes a http request.
+
+        Args:
+            method: HTTP method to use
+            url: URL that is being requested
+            authenticated: determines if the request is made as an authenticated user or not.
+                           If True, the request tries to use an access token to access the given
+                           URL.
+
+        Returns:
+            The response of the request
+
+        Raises:
+            UnAuthenticatedRequestError: If authenticated is True but the user has not obtained an
+                                         authentication token yet.
+
+        """
         if authenticated and not self.access_token:
-            raise Exception("Trying to make an authenticated request without being authenticated")
+            raise UnAuthenticatedRequestError("Trying to make an authenticated request without being authenticated")
 
         if authenticated:
             self._check_expiration_and_refresh_access_token()
@@ -129,6 +149,17 @@ class TriviaClient:
         return self._make_request("GET", url=url).json()
 
     def ws_join_lobby(self, lobby_name: str, token: str) -> Task[websockets.WebSocketClientProtocol]:
+        """
+        Establishes websocket connection with the GameConsumer
+
+        Args:
+            lobby_name: the name of the lobby to connect to
+            token: token used to authenticated in the lobby
+
+        Returns:
+            The websocket connection handler
+        """
+
         url = self.ws_base_url + f"/ws/trivia/lobbies/{lobby_name}?{token}"
 
         return websockets.connect(url)
