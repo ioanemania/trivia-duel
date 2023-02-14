@@ -74,7 +74,7 @@ class LobbyViewSet(ViewSet):
         try:
             lobby = Lobby.get(pk)
         except NotFoundError:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response(data={"detail": "Lobby not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if len(lobby.users) > 1:
             return Response(data={"detail": "Lobby is full"}, status=status.HTTP_400_BAD_REQUEST)

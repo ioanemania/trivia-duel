@@ -4,12 +4,21 @@ from .models import Game, Lobby, UserGame
 from .types import GameStatus, GameType
 
 
-class LobbySerializer(serializers.Serializer):
+class LobbySerializer(serializers.Serializer):  # noqa
     name = serializers.SlugField(max_length=100)
     ranked = serializers.BooleanField(default=False)
+    player_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Lobby
+
+    def get_player_count(self, lobby):  # noqa
+        return len(lobby.users)
+
+    def validate_name(self, value: str):
+        if any(Lobby.find(Lobby.name == value).all()):
+            raise serializers.ValidationError("Lobby with the given name already exists")
+        return value
 
 
 class GameSerializer(serializers.ModelSerializer):

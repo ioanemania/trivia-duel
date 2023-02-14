@@ -49,6 +49,20 @@ class LobbyViewSetTestCase(APITestCase):
         self.assertEqual(lobby.name, lobby_name)
         self.assertIsNotNone(response.data.get("token"))
 
+    def test_create_lobby_already_created(self):
+        url = reverse("lobby-list")
+        lobby_name = "TEST_CREATE_LOBBY"
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(url, {"name": lobby_name}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(url, {"name": lobby_name}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_join_lobby_unauthenticated(self):
         url = reverse("lobby-join", args=[self.lobby_name])
 
