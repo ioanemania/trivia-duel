@@ -109,7 +109,7 @@ class TriviaClient:
         ).json()
         self.access_token, self.refresh_token = data["access"], data["refresh"]
 
-    def get_lobbies(self, ranked: Optional[bool] = None) -> list:
+    def get_lobbies(self, ranked: Optional[bool] = None) -> list[dict]:
         url_components = (self.api_base_url, "/api/trivia/lobbies/")
 
         if ranked is not None:

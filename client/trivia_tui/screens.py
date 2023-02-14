@@ -250,13 +250,13 @@ class JoinScreen(Screen):
             return
 
         for lobby in lobbies:
-            yield Button(lobby["name"])
+            yield Button(f"{lobby['name']} {lobby['player_count']}/2")
 
         yield BackButton("Go Back")
 
     async def on_button_pressed(self, event: Button.Pressed):
         """When a user presses on a lobby, try to connect to it"""
-        lobby_name = event.button.label
+        lobby_name = str(event.button.label).split()[0]
 
         try:
             data = self.app.client.join_lobby(lobby_name)
@@ -327,6 +327,7 @@ class GameScreen(Screen):
             duration = event["duration"]
 
             confirm_leave = self.query_one("#confirm-leave", ConfirmLeaveModal)
+            confirm_leave.display = "none"
             await self.query_one("#static-info", Static).remove()
             await self.mount(GameHeader(self.app.username, opponent_name, duration), before=confirm_leave)
             await self.mount(Container(id="container-question"))
