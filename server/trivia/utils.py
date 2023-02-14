@@ -9,7 +9,6 @@ from trivia.types import TriviaAPIQuestion
 class TriviaAPIClient:
     @staticmethod
     def get_questions(token: str = None) -> list[TriviaAPIQuestion]:
-        # TODO: Refactor URL construction
         url = settings.TRIVIA_API_URL + (f"&token={token}" if token else "")
 
         response = requests.get(url)

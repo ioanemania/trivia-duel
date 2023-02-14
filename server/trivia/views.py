@@ -19,6 +19,15 @@ class LobbyViewSet(ViewSet):
     serializer_class = LobbySerializer
 
     def create(self, request):
+        """
+        Creates a new lobby, and returns a lobby authentication token to the user
+
+        Lobbies are created with an expiration time. This prevents cases of unused
+        lobbies when users create lobbies but fail to join them afterwards.
+
+        The lobbies are expected to be persisted after a user connects to the
+        lobby's associated websocket for the first time.
+        """
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -32,6 +41,13 @@ class LobbyViewSet(ViewSet):
         return Response(data={"token": token}, status=status.HTTP_201_CREATED)
 
     def list(self, request):
+        """
+        List all available lobbies
+
+        Accepts an additional query parameter "ranked" which can be either True
+        or False, and filters out only ranked or normal games respectively.
+        """
+
         is_ranked_param = request.query_params.get("ranked", "")
 
         try:
@@ -50,6 +66,13 @@ class LobbyViewSet(ViewSet):
 
     @action(detail=True, methods=["post"])
     def join(self, request, pk=None):
+        """
+        Generates a lobby authentication token, which can be used to join a lobby.
+
+        The token is not really bound to a specific lobby, it can be used to join any
+        lobby. Validation in this view is used to provide information to the user, actual
+        validation happens when the user tries to connect to the lobby's websocket connection.
+        """
         try:
             lobby = Lobby.get(pk)
         except NotFoundError:
@@ -74,12 +97,14 @@ class TrainingView(APIView):
 
     def get(self, request):
         """Gives questions to the client for training"""
+
         questions = TriviaAPIClient.get_questions()
 
         return Response(data=questions)
 
     def post(self, request):
-        """Saves a record of a training"""
+        """Saves a record of a training."""
+
         game = Game(type=GameType.TRAINING)
         game.save()
 
@@ -90,6 +115,8 @@ class TrainingView(APIView):
 
 
 class HistoryView(ListAPIView):
+    """Returns a list of all games that a user has previously played"""
+
     permission_classes = [IsAuthenticated]
     serializer_class = UserGameSerializer
 
