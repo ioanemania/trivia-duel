@@ -17,13 +17,18 @@ User = get_user_model()
 
 
 class Lobby(JsonModel):
+    """
+    Redis OM model used as a game session storage that tracks
+    information about a progressing game
+    """
+
     name: str = Field(primary_key=True)
     ready_count: int = 0
     users: Dict[UserId, PlayerData] = {}
     current_answer_count: int = 0
     current_question_count: int = 0
     state: LobbyState = LobbyState.WAITING
-    ranked: int = Field(index=True, default=0)
+    ranked: int = Field(index=True, default=0)  # tracks whether the lobby is ranked (1) or normal (0)
     trivia_token: str = ""
     correct_answers: list[CorrectAnswer] = []
     game_start_time: datetime = 0
@@ -73,6 +78,7 @@ class Game(models.Model):
             Creates and saves a new training Game and associated UserGame records in the database.
 
             Returns:
+                Tuple of the created Game and UserGame objects
 
             """
             game = Game(type=GameType.TRAINING)

@@ -5,6 +5,8 @@ from django.db.models import IntegerChoices
 Token = str
 UserId = int
 HP = int
+Difficulty = Literal["easy"] | Literal["medium"] | Literal["hard"]
+QuestionType = Literal["boolean"] | Literal["multiple"]
 
 
 class PlayerData(TypedDict):
@@ -36,9 +38,14 @@ class UserStatus(TypedDict):
 
 
 class TriviaAPIQuestion(TypedDict):
+    """
+    The expected format of a question received from
+    the Trivia API.
+    """
+
     category: str
-    type: Literal["boolean"] | Literal["multiple"]
-    difficulty: Literal["easy"] | Literal["medium"] | Literal["hard"]
+    type: QuestionType
+    difficulty: Difficulty
     question: str
     correct_answer: str
     incorrect_answers: list[str]
@@ -54,12 +61,25 @@ class TriviaAPIQuestionsResponse(TypedDict):
     results: list[TriviaAPIQuestion]
 
 
+class FormattedQuestion(TypedDict):
+    category: str
+    question: str
+    answers: list[str]
+    difficulty: Difficulty
+    duration: int
+    type: QuestionType
+
+
 class CorrectAnswer(NamedTuple):
     answer: str
-    difficulty: Literal["easy"] | Literal["medium"] | Literal["hard"]
+    difficulty: Difficulty
 
 
 class BaseEvent(TypedDict):
+    """
+    Base event. All events are expected to have a 'type' associated with them.
+    """
+
     type: str
 
 
@@ -75,8 +95,43 @@ class ClientEvent(BaseEvent):
     pass
 
 
+class GamePrepareEvent(ServerEvent):
+    pass
+
+
+class GameStartEvent(ServerEvent):
+    users: dict[str, str]
+    duration: int
+
+
 class GameEndEvent(ServerEvent):
     users: dict[str, UserStatus]
+
+
+class QuestionDataEvent(ServerEvent):
+    questions: list[FormattedQuestion]
+
+
+class QuestionNextEvent(ServerEvent):
+    pass
+
+
+class UserAnsweredEvent(ServerEvent):
+    user_id: UserId
+    correctly: bool
+    correct_answer: str
+    damage: int
+
+
+class QuestionResultEvent(ServerEvent):
+    correctly: bool
+    correct_answer: str
+    damage: int
+
+
+class OpponentAnsweredEvent(ServerEvent):
+    correctly: bool
+    damage: int
 
 
 class QuestionAnsweredEvent(ClientEvent):

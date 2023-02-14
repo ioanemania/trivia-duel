@@ -68,10 +68,12 @@ class GameConsumerTestCase(TestCase):
         self.get_questions_patcher = patch("trivia.consumers.TriviaAPIClient.get_questions")
         self.get_token_patcher = patch("trivia.consumers.TriviaAPIClient.get_token")
         self.send_event_to_lobby_patcher = patch("trivia.consumers.GameConsumer.send_event_to_lobby")
+        self.send_json_patcher = patch("trivia.consumers.GameConsumer.send_json")
 
         self.mock_get_questions = self.get_questions_patcher.start()
         self.mock_get_token = self.get_token_patcher.start()
         self.mock_send_event_to_lobby = self.send_event_to_lobby_patcher.start()
+        self.mock_send_json = self.send_json_patcher.start()
 
         self.mock_get_questions.return_value = self.questions
         self.mock_get_token.return_value = "FAKE_TOKEN"
@@ -88,6 +90,7 @@ class GameConsumerTestCase(TestCase):
         self.get_questions_patcher.stop()
         self.get_token_patcher.stop()
         self.send_event_to_lobby_patcher.stop()
+        self.send_json_patcher.stop()
 
         for key in redis.scan_iter("*"):
             redis.delete(key)
@@ -608,7 +611,7 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.receive_json(content)
 
-        self.mock_send_event_to_lobby.assert_not_called()
+        self.mock_send_json.assert_not_called()
 
     def test_receive_fifty_request_true_false_question(self):
         self.game_consumer.token = self.user1_token
@@ -625,7 +628,7 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.receive_json(content)
 
-        self.mock_send_event_to_lobby.assert_not_called()
+        self.mock_send_json.assert_not_called()
 
     @patch("trivia.consumers.random.sample")
     def test_receive_fifty_request_multiple_choice_question(self, mock_sample):
@@ -643,8 +646,8 @@ class GameConsumerTestCase(TestCase):
         content: FiftyRequestedEvent = {"type": "fifty.request", "answers": self.formatted_questions[0]["answers"]}
 
         self.game_consumer.receive_json(content)
-        self.mock_send_event_to_lobby.assert_called_once_with(
-            "fifty.response", {"user_id": self.game_consumer.user_id, "incorrect_answers": mock_sample.return_value}
+        self.mock_send_json.assert_called_once_with(
+            {"type": "fifty.response", "incorrect_answers": mock_sample.return_value}
         )
 
     def test_receive_fifty_request_with_incorrect_amount_of_answers(self):
@@ -661,7 +664,7 @@ class GameConsumerTestCase(TestCase):
         content: FiftyRequestedEvent = {"type": "fifty.request", "answers": self.formatted_questions[0]["answers"]}
 
         self.game_consumer.receive_json(content)
-        self.mock_send_event_to_lobby.assert_not_called()
+        self.mock_send_json.assert_not_called()
 
     def test_receive_fifty_request_with_repeated_answers(self):
         self.game_consumer.user_id = self.user1.id
@@ -678,7 +681,7 @@ class GameConsumerTestCase(TestCase):
         content: FiftyRequestedEvent = {"type": "fifty.request", "answers": self.formatted_questions[0]["answers"]}
 
         self.game_consumer.receive_json(content)
-        self.mock_send_event_to_lobby.assert_not_called()
+        self.mock_send_json.assert_not_called()
 
     @patch("trivia.consumers.async_to_sync")
     def test_send_event_to_lobby(self, mock_async_to_sync: MagicMock):
@@ -780,16 +783,14 @@ class GameConsumerTestCase(TestCase):
             },
         )
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_game_prepare(self, mock_send_json: MagicMock):
+    def test_game_prepare(self):
         event = {"type": "game.prepare"}
 
         self.game_consumer.game_prepare(event)
 
-        mock_send_json.assert_called_once_with(event)
+        self.mock_send_json.assert_called_once_with(event)
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_game_start(self, mock_send_json: MagicMock):
+    def test_game_start(self):
         event = {
             "type": "game.start",
             "duration": settings.GAME_MAX_DURATION_SECONDS,
@@ -799,13 +800,12 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.game_start(event)
 
-        mock_send_json.assert_called_once_with(
+        self.mock_send_json.assert_called_once_with(
             {"type": event["type"], "duration": event["duration"], "opponent": event["users"][str(self.user1.id)]}
         )
 
     @patch("trivia.consumers.GameConsumer.close")
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_game_end(self, mock_send_json: MagicMock, mock_close: MagicMock):
+    def test_game_end(self, mock_close: MagicMock):
         event: GameEndEvent = {
             "type": "game.end",
             "users": {
@@ -817,7 +817,7 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.game_end(event)
 
-        mock_send_json.assert_called_once_with(
+        self.mock_send_json.assert_called_once_with(
             {
                 "type": event["type"],
                 "status": event["users"][str(self.user1.id)]["status"].name.lower(),
@@ -826,8 +826,7 @@ class GameConsumerTestCase(TestCase):
         )
         mock_close.assert_called_once()
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_question_data(self, mock_send_json: MagicMock):
+    def test_question_data(self):
         event = {
             "type": "question.data",
             "questions": ANY,
@@ -835,19 +834,17 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.question_data(event)
 
-        mock_send_json.assert_called_once_with(event)
+        self.mock_send_json.assert_called_once_with(event)
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_question_next(self, mock_send_json: MagicMock):
+    def test_question_next(self):
         event = {"type": "question.next"}
 
         self.game_consumer.question_next(event)
 
         self.assertFalse(self.game_consumer.question_answered)
-        mock_send_json.assert_called_once_with(event)
+        self.mock_send_json.assert_called_once_with(event)
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_user_answered_self(self, mock_send_json: MagicMock):
+    def test_user_answered_self(self):
         event = {
             "type": "user.answered",
             "user_id": self.user1.id,
@@ -859,7 +856,7 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.user_answered(event)
 
-        mock_send_json.assert_called_once_with(
+        self.mock_send_json.assert_called_once_with(
             {
                 "type": "question.result",
                 "correctly": event["correctly"],
@@ -868,8 +865,7 @@ class GameConsumerTestCase(TestCase):
             }
         )
 
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_user_answered_opponent(self, mock_send_json: MagicMock):
+    def test_user_answered_opponent(self):
         event = {
             "type": "user.answered",
             "user_id": self.user1.id,
@@ -881,27 +877,9 @@ class GameConsumerTestCase(TestCase):
 
         self.game_consumer.user_answered(event)
 
-        mock_send_json.assert_called_once_with(
+        self.mock_send_json.assert_called_once_with(
             {"type": "opponent.answered", "correctly": event["correctly"], "damage": 20}
         )
-
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_fifty_response_self(self, mock_send_json: MagicMock):
-        event = {"type": "fifty.response", "incorrect_answers": ["1", "2"], "user_id": self.user1.id}
-        self.game_consumer.user_id = self.user1.id
-
-        self.game_consumer.fifty_response(event)
-
-        mock_send_json.assert_called_once_with(event)
-
-    @patch("trivia.consumers.GameConsumer.send_json")
-    def test_fifty_response_opponent(self, mock_send_json: MagicMock):
-        event = {"type": "fifty.response", "incorrect_answers": ["1", "2"], "user_id": self.user1.id}
-        self.game_consumer.user_id = self.user2.id
-
-        self.game_consumer.fifty_response(event)
-
-        mock_send_json.assert_not_called()
 
     def test_determine_user_status_by_hp_equal(self):
         data = [

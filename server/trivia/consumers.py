@@ -18,11 +18,17 @@ from .types import (
     ClientEvent,
     CorrectAnswer,
     FiftyRequestedEvent,
+    FormattedQuestion,
     GameEndEvent,
+    GamePrepareEvent,
+    GameStartEvent,
     GameStatus,
     GameType,
     QuestionAnsweredEvent,
+    QuestionDataEvent,
+    QuestionNextEvent,
     TriviaAPIQuestion,
+    UserAnsweredEvent,
     UserId,
     UserStatus,
 )
@@ -32,6 +38,27 @@ User = get_user_model()
 
 
 class GameConsumer(JsonWebsocketConsumer):
+    """
+    Consumer that is used to play a multiplayer trivia game.
+
+    The game is played out by the users and the consumer communicating
+    different events with each other.
+
+    Expected User events are:
+        - game.ready => sent when a user is ready to start the game
+        - question.answered => sent when a user has answered a question
+        - fifty.request => sent when a user wants to use their 50/50 chance
+
+    Defined Consumer events are:
+        - game.prepare => tell users that the game is ready to be started
+        - game.start => tell users that the game has started
+        - game.end => tell users that the game has ended
+        - question.data => give users a new set of questions
+        - question.next => tell users that they should start answering the next question
+        - question.result => tell a user how they answered a question
+        - opponent.answered => tell a user how their opponent answered a question
+    """
+
     def __init__(self, *args, **kwargs):
         self.lobby_name: Optional[str] = None
         self.user_id: Optional[int] = None
@@ -42,9 +69,25 @@ class GameConsumer(JsonWebsocketConsumer):
         super().__init__(*args, **kwargs)
 
     def get_token_from_query_string(self) -> str:
+        """
+        Extracts the lobby authentication token from the query string.
+
+        Token is expected to be passed in as the full query string,
+        so for example /my_lobby?the_authentication_token
+
+        Returns:
+            base64 encoded JWT
+        """
         return self.scope["query_string"].decode()
 
     def connect(self):
+        """
+        Validate that the user is authenticated and try to connect them to a lobby.
+
+        Users are expected to provide a lobby authentication token which is generated
+        by the Server API on join and create actions. Users are expected to provide the token
+        as the query string of the websocket request.
+        """
         self.lobby_name = self.scope["url_route"]["kwargs"]["lobby_name"]
 
         try:
@@ -74,8 +117,13 @@ class GameConsumer(JsonWebsocketConsumer):
         async_to_sync(self.channel_layer.group_add)(self.lobby_name, self.channel_name)
 
         if len(lobby.users) == 1:
+            # Lobbies are created with an expiration time, after the first user
+            # connects, the expiration time should be removed.
             Lobby.db().persist(lobby.key())
         elif len(lobby.users) == 2:
+            # Whenever the second user successfully connects to a lobby, the game is ready to be started.
+            # An event is sent to the users to notify them that the game is ready to be started.
+            # Server awaits user responses to start the game.
             self.send_event_to_lobby("game.prepare")
 
         lobby.save()
@@ -83,6 +131,14 @@ class GameConsumer(JsonWebsocketConsumer):
         raise AcceptConnection()
 
     def disconnect(self, code):
+        """
+        Removes a connected user from the lobby.
+
+        Lobby is also deleted if it is left without any players.
+
+        If a user disconnects when a game is in progress, the game ends with
+        the user being counted as the loser.
+        """
         if not self.user_id:
             return
 
@@ -129,7 +185,18 @@ class GameConsumer(JsonWebsocketConsumer):
             case _:
                 return
 
-    def receive_game_ready(self, _content: dict):
+    def receive_game_ready(self, _event: dict):
+        """
+        Client event that notifies the server when a user is ready to start the game.
+
+        When both users become ready, the game is started. The state of the lobby is initialized
+        and the first set of trivia questions are obtained from the Trivia API.
+
+        Events are sent to the users to:
+            - notify them about the start of the game
+            - send them the initial questions
+            - notify them to start answering the first question
+        """
         lobby = Lobby.get(self.lobby_name)
         if len(lobby.users) != 2 or lobby.ready_count >= 2 or self.ready_sent:
             return
@@ -163,6 +230,26 @@ class GameConsumer(JsonWebsocketConsumer):
         lobby.save()
 
     def receive_question_answered(self, event: QuestionAnsweredEvent):
+        """
+        Client event that notifies the server that a user has answered a question.
+
+        Whenever a user answers a question, an event is sent back in response to both users,
+        to notify them how the question was answered.
+
+        When both users answer the question, the current question count is checked to
+        determine if users have answered all the currently available questions. If so,
+        a new set of questions is obtained from the Trivia API and sent to the users.
+
+        When both users answer the question, two checks happens to try and determine
+        if the game has ended. These checks are:
+            - Check to see if any of the users have 0 health points
+            - Check to see if maximum game duration has expired
+
+        If any of those checks are true, the game is ended and a corresponding event is sent to the user
+        to notify them that the game has ended.
+
+        If the game has not ended the users are notified to continue to the next question.
+        """
         lobby = Lobby.get(self.lobby_name)
 
         if self.question_answered:
@@ -227,6 +314,17 @@ class GameConsumer(JsonWebsocketConsumer):
         self.send_event_to_lobby("question.next")
 
     def receive_fifty_request(self, event: FiftyRequestedEvent):
+        """
+        Client event that notifies the server that a user wants to use their 50/50 chance.
+
+        50/50 chance allows the user to eliminate two answers for the question if that question
+        is not a true/false question. Two random incorrect answers are chosen and sent back to the
+        user. The server does not store incorrect answers on its side, incorrect answers are expected
+        to be received from the user.
+
+        Users have access to this ability only once, so any 50/50 event that is sent after the first
+        one is ignored.
+        """
         if self.fifty_used:
             return
 
@@ -242,9 +340,7 @@ class GameConsumer(JsonWebsocketConsumer):
             return
 
         random_incorrect_answers = random.sample(incorrect_answers, k=2)
-        self.send_event_to_lobby(
-            "fifty.response", {"user_id": self.user_id, "incorrect_answers": random_incorrect_answers}
-        )
+        self.send_json({"type": "fifty.response", "incorrect_answers": random_incorrect_answers})
 
     def send_event_to_lobby(self, msg_type: str, data: dict = None) -> None:
         """Wrapper function to broadcast messages to the lobby's channel group"""
@@ -255,6 +351,11 @@ class GameConsumer(JsonWebsocketConsumer):
         async_to_sync(self.channel_layer.group_send)(self.lobby_name, {"type": msg_type, **data})
 
     def handle_game_end(self, users: dict[UserId, GameStatus]) -> None:
+        """
+        Stores a record of the game and associated information in the database,
+        updates user ranks if the game was ranked and send an event to the users to notify them
+        about the results of the game.
+        """
         lobby = Lobby.get(self.lobby_name)
         lobby.state = LobbyState.FINISHED
         lobby.save()
@@ -281,10 +382,10 @@ class GameConsumer(JsonWebsocketConsumer):
 
         self.send_event_to_lobby("game.end", {"users": user_status_dict})
 
-    def game_prepare(self, event: dict):
+    def game_prepare(self, event: GamePrepareEvent):
         self.send_json(event)
 
-    def game_start(self, event: dict):
+    def game_start(self, event: GameStartEvent):
         opponent = event["users"][str(self.user_id)]
 
         self.send_json({"type": event["type"], "duration": event["duration"], "opponent": opponent})
@@ -297,14 +398,19 @@ class GameConsumer(JsonWebsocketConsumer):
 
         self.close()
 
-    def question_data(self, event: dict):
+    def question_data(self, event: QuestionDataEvent):
         self.send_json(event)
 
-    def question_next(self, event: dict):
+    def question_next(self, event: QuestionNextEvent):
         self.question_answered = False
         self.send_json(event)
 
-    def user_answered(self, event: dict):
+    def user_answered(self, event: UserAnsweredEvent):
+        """
+        user.answered event is split and sent as two different events:
+            - question.result: is sent to the user that answered the question
+            - opponent.answered: is sent to that users opponent (the other user)
+        """
         message = {
             "correctly": event["correctly"],
             "correct_answer": event["correct_answer"],
@@ -319,13 +425,17 @@ class GameConsumer(JsonWebsocketConsumer):
 
         self.send_json(message)
 
-    def fifty_response(self, event: dict):
-        if event["user_id"] == self.user_id:
-            self.send_json(event)
-
     def determine_user_status_by_hp(self, users: list[tuple[UserId, HP]]) -> dict[UserId, GameStatus]:  # noqa
-        """Determine the win/loss/draw status of both users based on their hp"""
+        """
+        Determine the win/loss/draw status of both users based on their hp.
 
+        Args:
+            users: list of tuples of the user's id and hp
+
+        Returns:
+            A dictionary with keys and values corresponding to the users' ids and determined game statuses
+
+        """
         user1_id, user1_hp = users[0]
         user2_id, user2_hp = users[1]
 
@@ -342,11 +452,28 @@ class GameConsumer(JsonWebsocketConsumer):
         }
 
     def determine_rank_gain_by_game_status(self, status: GameStatus) -> int:  # noqa
-        return {GameStatus.WIN: settings.GAME_RANK_GAIN, GameStatus.LOSS: -settings.GAME_RANK_GAIN, GameStatus.DRAW: 0}[
-            status
-        ]
+        match status:
+            case GameStatus.WIN:
+                return settings.GAME_RANK_GAIN
+            case GameStatus.LOSS:
+                return -settings.GAME_RANK_GAIN
+            case GameStatus.DRAW:
+                return 0
 
-    def get_and_format_questions(self, trivia_token: str) -> tuple[list[dict], list[CorrectAnswer]]:
+    def get_and_format_questions(self, trivia_token: str) -> tuple[list[FormattedQuestion], list[CorrectAnswer]]:
+        """
+        Obtains a set of questions from the Trivia API and returns them in an appropriate
+        format alongside a list containing the correct answer for each question.
+
+        Args:
+            trivia_token: Trivia API token that is used for the current session of requests.
+                          the API token is needed to guarantee unique questions between
+                          subsequent calls to the API.
+
+        Returns:
+            A tuple containing the list of formatted questions and the list of correct answers.
+            A correct answer is a tuple containing the correct answer and its difficulty.
+        """
         correct_answers = []
         formatted_questions = []
 
@@ -361,7 +488,20 @@ class GameConsumer(JsonWebsocketConsumer):
 
         return formatted_questions, correct_answers
 
-    def format_trivia_question(self, question: TriviaAPIQuestion) -> tuple[dict, str]:  # noqa
+    def format_trivia_question(self, question: TriviaAPIQuestion) -> tuple[FormattedQuestion, str]:  # noqa
+        """
+        Formats a question obtained from the Trivia API and returns it alongside the question's
+        correct answer.
+
+        Formatting involves: mixing and randomizing correct and incorrect answers, un-escaping
+        html escaped characters and calculating the questions maximum allowed duration.
+
+        Args:
+            question: the question to be formatted
+
+        Returns:
+            A tuple of the formatted question and the correct answer
+        """
         if question["type"] == "boolean":
             answers = ["True", "False"]
         else:

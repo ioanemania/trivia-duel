@@ -10,8 +10,20 @@ User = get_user_model()
 
 
 class TriviaAPIClient:
+    """Client used to communicated with the Trivia Questions API"""
+
     @staticmethod
     def get_questions(token: str = None) -> list[TriviaAPIQuestion]:
+        """
+        Get questions from the API.
+
+        Args:
+            token: API token that can be used to track obtained questions.
+                   the token guarantees to prevent obtaining repeated questions.
+
+        Returns:
+            A list of trivia questions
+        """
         url = settings.TRIVIA_API_URL + (f"&token={token}" if token else "")
 
         response = requests.get(url)
@@ -21,6 +33,15 @@ class TriviaAPIClient:
 
     @staticmethod
     def get_token() -> str:
+        """
+        Get a Trivia API token.
+
+        The API token is used as a session identifier, to track previously obtained questions.
+        It can be used when requesting questions to guarantee that they won't be repeated.
+
+        Returns:
+            the API token
+        """
         response = requests.get(settings.TRIVIA_API_TOKEN_URL)
         response.raise_for_status()
 

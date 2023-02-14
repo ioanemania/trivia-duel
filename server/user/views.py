@@ -5,6 +5,11 @@ from .models import User
 
 
 class UserRegisterView(CreateAPIView):
+    """
+    Simple registration view without any additional verification steps.
+    Creates an account in the system with the given username and password.
+    """
+
     serializer_class = serializers.UserRegisterSerializer
 
 

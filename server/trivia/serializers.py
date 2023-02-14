@@ -11,11 +11,6 @@ class LobbySerializer(serializers.Serializer):
     class Meta:
         model = Lobby
 
-    def validate_name(self, value: str):
-        if any(Lobby.find(Lobby.name == value).all()):
-            raise serializers.ValidationError("Lobby with the given name already exists")
-        return value
-
 
 class GameSerializer(serializers.ModelSerializer):
     class Meta:
